@@ -1,9 +1,10 @@
-import { useContext } from "react";
-import type { NotifiableClient } from "../client/types";
+import { useCallback, useContext, useSyncExternalStore } from "react";
+import type { NotifiableBinding } from "../client/types";
+import type { IdentifyInput } from "../domain/subscriber";
 import { NotifiableError } from "../domain/errors";
 import { NotifiableContext } from "./context";
 
-export function useNotifiable(): NotifiableClient {
+export function useNotifiable(): NotifiableBinding {
   const client = useContext(NotifiableContext);
 
   if (client === null) {
@@ -13,5 +14,30 @@ export function useNotifiable(): NotifiableClient {
     });
   }
 
-  return client;
+  const subscribe = useCallback(
+    (listener: () => void) => client.subscribe(listener),
+    [client],
+  );
+  const getSnapshot = useCallback(() => client.getSnapshot(), [client]);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const start = useCallback(() => client.start(), [client]);
+  const requestPermission = useCallback(
+    () => client.requestPermission(),
+    [client],
+  );
+  const identify = useCallback(
+    (input: IdentifyInput) => client.identify(input),
+    [client],
+  );
+
+  return {
+    config: client.config,
+    ready: snapshot.ready,
+    permission: snapshot.permission,
+    subscriber: snapshot.subscriber,
+    error: snapshot.error,
+    start,
+    requestPermission,
+    identify,
+  };
 }

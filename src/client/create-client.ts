@@ -1,41 +1,56 @@
-import { asAppKey } from "../domain/identifiers";
+import { notifiableBaseUrls } from "../domain/environment";
 import { invariant } from "../internal/assert";
-import { createPlatformAdapter } from "../platform/create-platform";
-import {
-  createHttpClient,
-  type HttpClientOptions,
-} from "../transport/http-client";
+import { createDevicePort } from "../platform/create-device";
+import { createHttpClient, stripTrailingSlash } from "../transport/http-client";
+import { createSdkApi } from "../transport/sdk-api";
 import { NotifiableClientImpl } from "./notifiable-client";
 import type { NotifiableClient, NotifiableConfig } from "./types";
 
 export function createNotifiable(config: NotifiableConfig): NotifiableClient {
-  const appKey = config.appKey.trim();
-  invariant(appKey.length > 0, "invalid_config", "appKey is required");
+  const publicKey = config.publicKey.trim();
+  invariant(publicKey.length > 0, "invalid_config", "publicKey is required");
 
-  const resolved = copyConfig(config, asAppKey(appKey));
+  const baseUrl = resolveBaseUrl(config);
 
   return new NotifiableClientImpl(
-    resolved,
-    createHttpClient(httpOptionsFrom(resolved)),
-    createPlatformAdapter(),
+    copyConfig(config, publicKey, baseUrl),
+    createSdkApi(
+      createHttpClient({
+        baseUrl,
+        publicKey,
+      }),
+    ),
+    config.device ?? createDevicePort(),
+    config.storage,
   );
 }
 
-function httpOptionsFrom(config: NotifiableConfig): HttpClientOptions {
-  if (config.baseUrl === undefined) {
-    return {};
+function resolveBaseUrl(config: NotifiableConfig): string {
+  if (config.baseUrl !== undefined) {
+    const baseUrl = stripTrailingSlash(config.baseUrl.trim());
+    invariant(baseUrl.length > 0, "invalid_config", "baseUrl cannot be blank");
+    return baseUrl;
   }
 
-  return { baseUrl: config.baseUrl };
+  return notifiableBaseUrls[config.environment ?? "production"];
 }
 
 function copyConfig(
   config: NotifiableConfig,
-  appKey: string,
+  publicKey: string,
+  baseUrl: string,
 ): NotifiableConfig {
+  const environment =
+    config.environment ??
+    (config.baseUrl === undefined ? "production" : undefined);
+
   return {
-    appKey,
-    ...(config.baseUrl !== undefined ? { baseUrl: config.baseUrl } : {}),
+    publicKey,
+    baseUrl,
+    ...(environment !== undefined ? { environment } : {}),
     ...(config.logger !== undefined ? { logger: config.logger } : {}),
+    ...(config.push !== undefined ? { push: config.push } : {}),
+    ...(config.storage !== undefined ? { storage: config.storage } : {}),
+    ...(config.device !== undefined ? { device: config.device } : {}),
   };
 }

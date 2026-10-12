@@ -1,21 +1,13 @@
-import type { DeviceId } from "../domain/identifiers";
-import type { NotificationContent } from "../domain/notification";
+import type { DeviceProfile, PushProvider } from "../domain/subscriber";
+import type { PermissionStatus } from "../domain/subscriber";
 
-export type PermissionStatus = "undetermined" | "granted" | "denied";
-
-export type DevicePlatform = "ios" | "android";
-
-export interface DeviceToken {
-  readonly id: DeviceId;
-  readonly token: string;
-  readonly platform: DevicePlatform;
+export interface PushPort {
+  readonly provider: PushProvider;
+  getPermissionStatus?: () => Promise<PermissionStatus>;
+  requestPermission(): Promise<PermissionStatus>;
+  getToken(): Promise<string | null>;
 }
 
-export interface DisplayedNotification {
-  readonly content: NotificationContent;
-}
-
-export interface PlatformAdapter {
-  getPermissionStatus(): Promise<PermissionStatus>;
-  getDeviceToken(): Promise<DeviceToken | null>;
+export interface DevicePort {
+  getProfile(): Promise<DeviceProfile>;
 }

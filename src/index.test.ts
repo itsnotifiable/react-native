@@ -22,6 +22,14 @@ describe("error codes", () => {
       "invalid_config",
       "missing_provider",
       "not_implemented",
+      "invalid_public_key",
+      "network",
+      "validation_failed",
+      "subscriber_not_found",
+      "subscriber_limit",
+      "rate_limited",
+      "missing_token",
+      "missing_storage",
     ]);
   });
 
@@ -40,22 +48,38 @@ describe("error codes", () => {
 });
 
 describe("createNotifiable", () => {
-  it("returns a client from config without other dependencies", () => {
-    const client = createNotifiable({
-      appKey: " app_123 ",
-      baseUrl: "https://api.notifiable.sh",
+  it("uses the local and production hosts", () => {
+    const local = createNotifiable({
+      publicKey: " ntf_pub_local ",
+      environment: "local",
+    });
+    const production = createNotifiable({
+      publicKey: "ntf_pub_prod",
+    });
+    const custom = createNotifiable({
+      publicKey: "ntf_pub_custom",
+      baseUrl: "https://example.test/api/",
     });
 
-    expect(client.config.appKey).toBe("app_123");
-    expect(client.config.baseUrl).toBe("https://api.notifiable.sh");
-    expect(client.config.logger).toBeUndefined();
+    expect(local.config).toMatchObject({
+      publicKey: "ntf_pub_local",
+      environment: "local",
+      baseUrl: "http://127.0.0.1:8000/api",
+    });
+    expect(production.config).toMatchObject({
+      environment: "production",
+      baseUrl: "https://notifiable.sh/api",
+    });
+    expect(custom.config.baseUrl).toBe("https://example.test/api");
+    expect(custom.config.environment).toBeUndefined();
+    expect(local.config.logger).toBeUndefined();
   });
 
-  it("rejects a blank app key", () => {
+  it("rejects a blank public key", () => {
     expect.assertions(2);
 
     try {
-      createNotifiable({ appKey: "   " });
+      createNotifiable({ publicKey: "   " });
     } catch (error) {
       expect(error).toBeInstanceOf(NotifiableError);
       expect(error).toMatchObject({ code: "invalid_config" });

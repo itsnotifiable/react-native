@@ -4,10 +4,10 @@ type Brand<TValue, TBrand extends string> = TValue & {
   readonly [brand]: TBrand;
 };
 
-export type AppKey = Brand<string, "AppKey">;
+export type PublicKey = Brand<string, "PublicKey">;
 export type UserId = Brand<string, "UserId">;
 export type DeviceId = Brand<string, "DeviceId">;
 
-export function asAppKey(value: string): AppKey {
-  return value as AppKey;
+export function asPublicKey(value: string): PublicKey {
+  return value as PublicKey;
 }

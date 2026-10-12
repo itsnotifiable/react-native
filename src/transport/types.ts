@@ -1,4 +1,4 @@
-export type HttpMethod = "GET" | "POST" | "PUT" | "DELETE";
+export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface HttpRequest {
   readonly method: HttpMethod;
@@ -6,11 +6,23 @@ export interface HttpRequest {
   readonly body?: unknown;
 }
 
-export interface HttpResponse<TBody> {
-  readonly status: number;
-  readonly body: TBody;
+export interface FetchInit {
+  readonly method?: string;
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly body?: string;
 }
 
+export interface FetchResponse {
+  readonly ok: boolean;
+  readonly status: number;
+  json(): Promise<unknown>;
+}
+
+export type FetchLike = (
+  url: string,
+  init?: FetchInit,
+) => Promise<FetchResponse>;
+
 export interface HttpClient {
-  request<TBody>(request: HttpRequest): Promise<HttpResponse<TBody>>;
+  request(request: HttpRequest): Promise<unknown>;
 }
