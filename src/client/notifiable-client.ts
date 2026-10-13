@@ -6,6 +6,7 @@ import { loadSession, saveSession } from "../internal/session";
 import { loadDefaultStorage } from "../internal/storage";
 import type { DeepLink } from "../domain/deep-link";
 import type { DevIndicatorChoice } from "../domain/dev-indicator";
+import type { EventProperty, RecordedEvent } from "../domain/event";
 import type {
   InboxPage,
   InboxQuery,
@@ -117,6 +118,17 @@ export class NotifiableClientImpl implements NotifiableClient {
 
   readonly clickDelivery = (deliveryId: string): Promise<void> =>
     this.#api.clickDelivery(deliveryId);
+
+  readonly track = (
+    name: string,
+    properties?: Readonly<Record<string, EventProperty>>,
+  ): Promise<RecordedEvent> => {
+    const subscriberId = this.#requireSubscriberId();
+
+    return properties === undefined
+      ? this.#api.trackEvent(subscriberId, name)
+      : this.#api.trackEvent(subscriberId, name, properties);
+  };
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);

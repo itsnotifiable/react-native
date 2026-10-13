@@ -478,6 +478,13 @@ function Home({
           );
         }}
       />
+      <Action
+        label="Track order shipped"
+        disabled={busy || subscriber === null}
+        onPress={() => {
+          void run(() => notifiable.track('order.shipped', { order: '1001' }));
+        }}
+      />
       {pages.map(page => (
         <Action
           key={page.path}

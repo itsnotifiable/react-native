@@ -19,7 +19,7 @@ The marketing site shows a singleton-style API (`Notifiable.configure`, `request
 
 ## This package
 
-`@notifiable/react-native` is the React Native SDK. It connects with a public key, registers a subscriber even when push permission is denied, and identifies that subscriber by email. Events and production notification display are not implemented. On a successful connect, the SDK saves the deep links the app passes. `inbox()` lists the connected subscriber's notifications, 20 per page. A development key polls recent unread notifications and shows each one once as a top toast. This package does not ship Firebase, APNs, or Expo. The app passes a `PushPort`.
+`@notifiable/react-native` is the React Native SDK. It connects with a public key, registers a subscriber even when push permission is denied, and identifies that subscriber by email. Production notification display is not implemented. `track(name, properties)` records an event for the connected subscriber. On a successful connect, the SDK saves the deep links the app passes. `inbox()` lists the connected subscriber's notifications, 20 per page. A development key polls recent unread notifications and shows each one once as a top toast. This package does not ship Firebase, APNs, or Expo. The app passes a `PushPort`.
 
 Consumers install it with `npm install @notifiable/react-native` and import only from `@notifiable/react-native`. Deep imports are not public. Persistent sessions need the optional peer `@react-native-async-storage/async-storage`, or a `storage` object on the config.
 
@@ -78,6 +78,8 @@ The stored session is `deviceId`, `subscriberId`, `pushToken`, and `anonymousId`
 | `SubscriberNotification`  | type      | One inbox notification, including an optional delivery id                             |
 | `InboxPage`               | type      | One page from `inbox()`: notifications, page, perPage, total                          |
 | `InboxQuery`              | type      | Optional `page` and `opened` for `inbox()`                                            |
+| `RecordedEvent`           | type      | Event returned by `track()`: id, name, and subscriber id                              |
+| `EventProperty`           | type      | Text, number, boolean, or null on a tracked event                                     |
 | `DeepLink`                | type      | App route saved on connect: `path` and `label`                                        |
 | `IdentifyInput`           | type      | Email, external id, and name                                                          |
 | `PermissionStatus`        | type      | `granted`, `denied`, `not_determined`                                                 |

@@ -1,6 +1,7 @@
 import { useCallback, useContext, useSyncExternalStore } from "react";
 import type { NotifiableBinding } from "../client/types";
 import type { InboxQuery } from "../domain/inbox";
+import type { EventProperty } from "../domain/event";
 import type { IdentifyInput } from "../domain/subscriber";
 import { NotifiableError } from "../domain/errors";
 import { NotifiableContext } from "./context";
@@ -51,6 +52,13 @@ export function useNotifiable(): NotifiableBinding {
     (deliveryId: string) => client.clickDelivery(deliveryId),
     [client],
   );
+  const track = useCallback(
+    (name: string, properties?: Readonly<Record<string, EventProperty>>) =>
+      properties === undefined
+        ? client.track(name)
+        : client.track(name, properties),
+    [client],
+  );
 
   return {
     config: client.config,
@@ -69,5 +77,6 @@ export function useNotifiable(): NotifiableBinding {
     notification,
     openNotification,
     clickDelivery,
+    track,
   };
 }

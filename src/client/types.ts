@@ -8,6 +8,7 @@ import type {
 } from "../domain/subscriber";
 import type { NotifiableError } from "../domain/errors";
 import type { DeepLink } from "../domain/deep-link";
+import type { EventProperty, RecordedEvent } from "../domain/event";
 import type { DevIndicatorChoice } from "../domain/dev-indicator";
 import type {
   InboxPage,
@@ -54,6 +55,10 @@ export interface NotifiableClient {
   openNotification(subscriberId: string, notificationId: string): Promise<void>;
   openStoredNotification(notificationId: string): Promise<void>;
   clickDelivery(deliveryId: string): Promise<void>;
+  track(
+    name: string,
+    properties?: Readonly<Record<string, EventProperty>>,
+  ): Promise<RecordedEvent>;
   subscribe(listener: () => void): () => void;
   getSnapshot(): NotifiableSnapshot;
 }
@@ -75,12 +80,17 @@ export interface NotifiableBinding {
   notification(notificationId: string): Promise<SubscriberNotification>;
   openNotification(notificationId: string): Promise<void>;
   clickDelivery(deliveryId: string): Promise<void>;
+  track(
+    name: string,
+    properties?: Readonly<Record<string, EventProperty>>,
+  ): Promise<RecordedEvent>;
 }
 
 export type { Logger } from "../domain/logger";
 export type { KeyValueStore } from "../domain/storage";
 export type { NotifiableEnvironment } from "../domain/environment";
 export type { DeepLink } from "../domain/deep-link";
+export type { EventProperty, RecordedEvent } from "../domain/event";
 export type { DevIndicatorChoice } from "../domain/dev-indicator";
 export type {
   InboxPage,

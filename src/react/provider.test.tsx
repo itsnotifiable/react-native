@@ -87,6 +87,13 @@ describe("useNotifiable", () => {
       openNotification: vi.fn(() => Promise.resolve()),
       openStoredNotification: vi.fn(() => Promise.resolve()),
       clickDelivery: vi.fn(() => Promise.resolve()),
+      track: vi.fn(() =>
+        Promise.resolve({
+          id: "evt_1",
+          name: "order.shipped",
+          subscriberId: "sub_1",
+        }),
+      ),
       subscribe: () => () => undefined,
       getSnapshot: () => snapshot,
     };

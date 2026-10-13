@@ -6,6 +6,7 @@ export type {
   DeliveryConfig,
   DevIndicatorChoice,
   DevicePort,
+  EventProperty,
   IdentifyInput,
   InboxPage,
   InboxQuery,
@@ -19,6 +20,7 @@ export type {
   PermissionStatus,
   PushPort,
   PushProvider,
+  RecordedEvent,
   Subscriber,
   SubscriberNotification,
 } from "./client/types";

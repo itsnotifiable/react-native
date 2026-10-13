@@ -108,6 +108,22 @@ function createApi(): SdkApi & {
       inbox.push(`click ${deliveryId}`);
       return Promise.resolve();
     }),
+    trackEvent: vi.fn(
+      (
+        subscriberId: string,
+        name: string,
+        properties?: Readonly<Record<string, string | number | boolean | null>>,
+      ) => {
+        inbox.push(
+          `track ${subscriberId} ${name} ${JSON.stringify(properties ?? null)}`,
+        );
+        return Promise.resolve({
+          id: "evt_1",
+          name,
+          subscriberId,
+        });
+      },
+    ),
     saveDeepLinks: vi.fn((links: readonly DeepLink[]) => {
       const saved = links.map((link) => ({
         path: link.path,
@@ -389,5 +405,20 @@ describe("subscriber registration", () => {
       "get sub_1 note_1",
       "open sub_1 note_1",
     ]);
+  });
+
+  it("records an event for the connected subscriber", async () => {
+    const api = createApi();
+    const client = createClient(createMemoryStorage(), undefined, api);
+
+    await client.start();
+    await expect(
+      client.track("order.shipped", { order: "1001" }),
+    ).resolves.toEqual({
+      id: "evt_1",
+      name: "order.shipped",
+      subscriberId: "sub_1",
+    });
+    expect(api.inbox).toEqual(['track sub_1 order.shipped {"order":"1001"}']);
   });
 });

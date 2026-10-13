@@ -362,6 +362,54 @@ describe("sdk api", () => {
     });
   });
 
+  it("records an event for a subscriber", async () => {
+    let request: {
+      url: string;
+      method: string | undefined;
+      body: string | undefined;
+    } = { url: "", method: undefined, body: undefined };
+    const fetchImpl: FetchLike = (url, init) => {
+      request = { url, method: init?.method, body: init?.body };
+      return Promise.resolve(
+        jsonResponse(
+          201,
+          envelope(
+            {
+              id: "evt_1",
+              name: "order.shipped",
+              subscriber_id: "sub_1",
+            },
+            "EVENT_RECORDED",
+          ),
+        ),
+      );
+    };
+    const api = createSdkApi(
+      createHttpClient({
+        baseUrl: "http://127.0.0.1:8000/api",
+        publicKey: "ntf_pub_test",
+        fetch: fetchImpl,
+      }),
+    );
+
+    await expect(
+      api.trackEvent("sub_1", "order.shipped", { order: "1001" }),
+    ).resolves.toEqual({
+      id: "evt_1",
+      name: "order.shipped",
+      subscriberId: "sub_1",
+    });
+    expect(request).toEqual({
+      url: "http://127.0.0.1:8000/api/v1/sdk/events",
+      method: "POST",
+      body: JSON.stringify({
+        name: "order.shipped",
+        subscriber_id: "sub_1",
+        properties: { order: "1001" },
+      }),
+    });
+  });
+
   it("reports network failures", async () => {
     const fetchImpl: FetchLike = () => Promise.reject(new Error("offline"));
     const api = createSdkApi(

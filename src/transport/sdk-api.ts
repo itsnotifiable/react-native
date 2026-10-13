@@ -1,4 +1,5 @@
 import type { DeepLink } from "../domain/deep-link";
+import type { EventProperty, RecordedEvent } from "../domain/event";
 import { NotifiableError } from "../domain/errors";
 import type {
   InboxPage,
@@ -34,6 +35,11 @@ export interface SdkApi {
   ): Promise<SubscriberNotification>;
   openNotification(subscriberId: string, notificationId: string): Promise<void>;
   clickDelivery(deliveryId: string): Promise<void>;
+  trackEvent(
+    subscriberId: string,
+    name: string,
+    properties?: Readonly<Record<string, EventProperty>>,
+  ): Promise<RecordedEvent>;
   saveDeepLinks(links: readonly DeepLink[]): Promise<readonly DeepLink[]>;
 }
 
@@ -118,6 +124,23 @@ export function createSdkApi(http: HttpClient): SdkApi {
         method: "POST",
         path: `/v1/sdk/deliveries/${encodeURIComponent(deliveryId)}/click`,
       });
+    },
+
+    async trackEvent(
+      subscriberId: string,
+      name: string,
+      properties?: Readonly<Record<string, EventProperty>>,
+    ): Promise<RecordedEvent> {
+      const data = await http.request({
+        method: "POST",
+        path: "/v1/sdk/events",
+        body:
+          properties === undefined
+            ? { name, subscriber_id: subscriberId }
+            : { name, subscriber_id: subscriberId, properties },
+      });
+
+      return parseRecordedEvent(data);
     },
 
     async saveDeepLinks(
@@ -282,6 +305,27 @@ function recordOrNull(
   value: unknown,
 ): Readonly<Record<string, unknown>> | null {
   return isRecord(value) ? value : null;
+}
+
+function parseRecordedEvent(data: unknown): RecordedEvent {
+  if (
+    !isRecord(data) ||
+    typeof data.id !== "string" ||
+    data.id.length === 0 ||
+    typeof data.name !== "string" ||
+    typeof data.subscriber_id !== "string"
+  ) {
+    throw new NotifiableError({
+      code: "network",
+      message: "The event response was invalid.",
+    });
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    subscriberId: data.subscriber_id,
+  };
 }
 
 function parseDeepLinks(data: unknown): readonly DeepLink[] {
