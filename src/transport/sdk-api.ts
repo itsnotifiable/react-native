@@ -1,5 +1,10 @@
+import type { DeepLink } from "../domain/deep-link";
 import { NotifiableError } from "../domain/errors";
-import type { SubscriberNotification } from "../domain/inbox";
+import type {
+  InboxPage,
+  InboxQuery,
+  SubscriberNotification,
+} from "../domain/inbox";
 import { isRecord } from "../domain/record";
 import {
   isDevicePlatform,
@@ -21,9 +26,15 @@ export interface SdkApi {
   ): Promise<Subscriber>;
   listNotifications(
     subscriberId: string,
-  ): Promise<readonly SubscriberNotification[]>;
+    query?: InboxQuery,
+  ): Promise<InboxPage>;
+  getNotification(
+    subscriberId: string,
+    notificationId: string,
+  ): Promise<SubscriberNotification>;
   openNotification(subscriberId: string, notificationId: string): Promise<void>;
   clickDelivery(deliveryId: string): Promise<void>;
+  saveDeepLinks(links: readonly DeepLink[]): Promise<readonly DeepLink[]>;
 }
 
 export function createSdkApi(http: HttpClient): SdkApi {
@@ -62,13 +73,34 @@ export function createSdkApi(http: HttpClient): SdkApi {
 
     async listNotifications(
       subscriberId: string,
-    ): Promise<readonly SubscriberNotification[]> {
+      query?: InboxQuery,
+    ): Promise<InboxPage> {
       const data = await http.request({
         method: "GET",
-        path: `/v1/sdk/subscribers/${encodeURIComponent(subscriberId)}/notifications?page=1&per_page=5&opened=false`,
+        path: inboxPath(subscriberId, query),
       });
 
-      return parseNotificationList(data);
+      return parseInboxPage(data);
+    },
+
+    async getNotification(
+      subscriberId: string,
+      notificationId: string,
+    ): Promise<SubscriberNotification> {
+      const data = await http.request({
+        method: "GET",
+        path: `/v1/sdk/subscribers/${encodeURIComponent(subscriberId)}/notifications/${encodeURIComponent(notificationId)}`,
+      });
+      const notification = parseNotification(data);
+
+      if (notification === null) {
+        throw new NotifiableError({
+          code: "network",
+          message: "The notification response was invalid.",
+        });
+      }
+
+      return notification;
     },
 
     async openNotification(
@@ -86,6 +118,23 @@ export function createSdkApi(http: HttpClient): SdkApi {
         method: "POST",
         path: `/v1/sdk/deliveries/${encodeURIComponent(deliveryId)}/click`,
       });
+    },
+
+    async saveDeepLinks(
+      links: readonly DeepLink[],
+    ): Promise<readonly DeepLink[]> {
+      const data = await http.request({
+        method: "POST",
+        path: "/v1/sdk/deep-links",
+        body: {
+          links: links.map((link) => ({
+            path: link.path,
+            label: link.label,
+          })),
+        },
+      });
+
+      return parseDeepLinks(data);
     },
   };
 }
@@ -235,10 +284,56 @@ function recordOrNull(
   return isRecord(value) ? value : null;
 }
 
-function parseNotificationList(
-  data: unknown,
-): readonly SubscriberNotification[] {
-  if (!isRecord(data) || !Array.isArray(data.notifications)) {
+function parseDeepLinks(data: unknown): readonly DeepLink[] {
+  if (!isRecord(data) || !Array.isArray(data.links)) {
+    throw new NotifiableError({
+      code: "network",
+      message: "The deep link response was invalid.",
+    });
+  }
+
+  const links: DeepLink[] = [];
+
+  for (const entry of data.links) {
+    if (
+      !isRecord(entry) ||
+      typeof entry.path !== "string" ||
+      entry.path.length === 0 ||
+      typeof entry.label !== "string" ||
+      entry.label.length === 0
+    ) {
+      continue;
+    }
+
+    links.push({ path: entry.path, label: entry.label });
+  }
+
+  return links;
+}
+
+function inboxPath(subscriberId: string, query?: InboxQuery): string {
+  const path = `/v1/sdk/subscribers/${encodeURIComponent(subscriberId)}/notifications`;
+  const params: string[] = [];
+
+  if (query?.page !== undefined) {
+    params.push(`page=${query.page}`);
+  }
+
+  if (query?.opened !== undefined) {
+    params.push(`opened=${query.opened ? "true" : "false"}`);
+  }
+
+  return params.length === 0 ? path : `${path}?${params.join("&")}`;
+}
+
+function parseInboxPage(data: unknown): InboxPage {
+  if (
+    !isRecord(data) ||
+    !Array.isArray(data.notifications) ||
+    typeof data.page !== "number" ||
+    typeof data.per_page !== "number" ||
+    typeof data.total !== "number"
+  ) {
     throw new NotifiableError({
       code: "network",
       message: "The notification list was invalid.",
@@ -255,7 +350,12 @@ function parseNotificationList(
     }
   }
 
-  return notifications;
+  return {
+    notifications,
+    page: data.page,
+    perPage: data.per_page,
+    total: data.total,
+  };
 }
 
 function parseNotification(value: unknown): SubscriberNotification | null {
@@ -277,8 +377,11 @@ function parseNotification(value: unknown): SubscriberNotification | null {
     body: value.body,
     url: textOrNull(value.url),
     imageUrl: textOrNull(value.image_url),
+    data: recordOrNull(value.data),
     alert: typeof value.alert === "boolean" ? value.alert : true,
+    status: textOrNull(value.status),
     opened: value.opened,
+    openedAt: textOrNull(value.opened_at),
     createdAt: value.created_at,
     deliveryId: textOrNull(value.delivery_id),
   };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -19,8 +19,10 @@ import {
 import {
   NotifiableProvider,
   useNotifiable,
+  type DeepLink,
   type PermissionStatus,
   type PushPort,
+  type SubscriberNotification,
 } from '@notifiable/react-native';
 
 const permission: { current: PermissionStatus } = {
@@ -61,20 +63,77 @@ const push: PushPort = {
     ),
 };
 
+type ExamplePage = 'subscriber' | 'about' | 'delivery' | 'inbox';
+
+const pages: readonly {
+  id: Exclude<ExamplePage, 'subscriber'>;
+  path: string;
+  label: string;
+  body: string;
+}[] = [
+  {
+    id: 'about',
+    path: '/about',
+    label: 'About Notifiable',
+    body: 'Notifiable registers this device and delivers notifications to people who accept them. This page is one of the routes the SDK sends when connect succeeds.',
+  },
+  {
+    id: 'delivery',
+    path: '/delivery',
+    label: 'Delivery',
+    body: 'A development key does not send a real push. The SDK shows a recent unread notification at the top of the screen.',
+  },
+  {
+    id: 'inbox',
+    path: '/inbox',
+    label: 'Inbox',
+    body: 'Opening a notification records that open. A tap records a click when the notification includes a delivery id.',
+  },
+];
+
+const deepLinks: readonly DeepLink[] = pages.map(page => ({
+  path: page.path,
+  label: page.label,
+}));
+
 function defaultBaseUrl(): string {
   return Platform.OS === 'android'
     ? 'http://10.0.2.2:8000/api'
     : 'http://127.0.0.1:8000/api';
 }
 
+function pageFor(url: string): ExamplePage | null {
+  let pathname = url.split('?')[0] ?? url;
+
+  if (pathname.includes('://')) {
+    try {
+      pathname = new URL(url).pathname;
+    } catch {
+      return null;
+    }
+  }
+
+  const match = pages.find(page => page.path === pathname);
+
+  return match === undefined ? null : match.id;
+}
+
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [publicKey, setPublicKey] = useState('');
   const [baseUrl, setBaseUrl] = useState(defaultBaseUrl);
+  const [page, setPage] = useState<ExamplePage>('subscriber');
   const [connected, setConnected] = useState<{
     publicKey: string;
     baseUrl: string;
   } | null>(null);
+  const openDeepLink = useCallback((url: string) => {
+    const next = pageFor(url);
+
+    if (next !== null) {
+      setPage(next);
+    }
+  }, []);
 
   return (
     <SafeAreaProvider>
@@ -102,9 +161,14 @@ function App() {
           environment="local"
           baseUrl={connected.baseUrl}
           push={push}
+          deepLinks={deepLinks}
+          onDeepLink={openDeepLink}
         >
-          <Home
+          <Connected
+            page={page}
+            onOpen={setPage}
             onDisconnect={() => {
+              setPage('subscriber');
               setConnected(null);
             }}
           />
@@ -129,7 +193,6 @@ function ConnectScreen({
 }) {
   const insets = useSafeAreaInsets();
   const canConnect = publicKey.trim().length > 0 && baseUrl.trim().length > 0;
-
 
   useEffect(() => {
     console.log('publicKey', publicKey);
@@ -170,7 +233,169 @@ function ConnectScreen({
   );
 }
 
-function Home({ onDisconnect }: { onDisconnect: () => void }) {
+function Connected({
+  page,
+  onOpen,
+  onDisconnect,
+}: {
+  page: ExamplePage;
+  onOpen: (page: ExamplePage) => void;
+  onDisconnect: () => void;
+}) {
+  const current = pages.find(item => item.id === page);
+
+  if (page === 'inbox') {
+    return (
+      <InboxScreen
+        onBack={() => {
+          onOpen('subscriber');
+        }}
+      />
+    );
+  }
+
+  if (current !== undefined) {
+    return (
+      <InfoPage
+        title={current.label}
+        path={current.path}
+        body={current.body}
+        onBack={() => {
+          onOpen('subscriber');
+        }}
+      />
+    );
+  }
+
+  return <Home onDisconnect={onDisconnect} onOpen={onOpen} />;
+}
+
+function InboxScreen({ onBack }: { onBack: () => void }) {
+  const insets = useSafeAreaInsets();
+  const notifiable = useNotifiable();
+  const loadInbox = notifiable.inbox;
+  const openNotification = notifiable.openNotification;
+  const [pageNumber, setPageNumber] = useState(1);
+  const [items, setItems] = useState<readonly SubscriberNotification[]>([]);
+  const [perPage, setPerPage] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadInbox({ page: pageNumber })
+      .then(result => {
+        if (cancelled) {
+          return;
+        }
+
+        setItems(result.notifications);
+        setPerPage(result.perPage);
+        setTotal(result.total);
+        setError(null);
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) {
+          return;
+        }
+
+        setError(
+          reason instanceof Error
+            ? reason.message
+            : 'The inbox could not be loaded.',
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loadInbox, pageNumber]);
+
+  const hasNext = pageNumber * perPage < total;
+
+  return (
+    <ScrollView
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+      ]}
+    >
+      <Text style={styles.title}>Inbox</Text>
+      <Text style={styles.value}>/inbox</Text>
+      {error !== null ? <Text style={styles.subtitle}>{error}</Text> : null}
+      {items.length === 0 && error === null ? (
+        <Text style={styles.subtitle}>No notifications yet.</Text>
+      ) : null}
+      {items.map(item => (
+        <Pressable
+          key={item.id}
+          onPress={() => {
+            void openNotification(item.id);
+          }}
+        >
+          <Text style={styles.label}>{item.title}</Text>
+          <Text style={styles.value}>{item.body}</Text>
+        </Pressable>
+      ))}
+      {pageNumber > 1 ? (
+        <Action
+          label="Previous page"
+          disabled={false}
+          onPress={() => {
+            setPageNumber(current => current - 1);
+          }}
+        />
+      ) : null}
+      {hasNext ? (
+        <Action
+          label="Next page"
+          disabled={false}
+          onPress={() => {
+            setPageNumber(current => current + 1);
+          }}
+        />
+      ) : null}
+      <Action label="Back" onPress={onBack} disabled={false} />
+    </ScrollView>
+  );
+}
+
+function InfoPage({
+  title,
+  path,
+  body,
+  onBack,
+}: {
+  title: string;
+  path: string;
+  body: string;
+  onBack: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <ScrollView
+      contentContainerStyle={[
+        styles.content,
+        { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+      ]}
+    >
+      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.value}>{path}</Text>
+      <Text style={styles.subtitle}>{body}</Text>
+      <Action label="Back" onPress={onBack} disabled={false} />
+    </ScrollView>
+  );
+}
+
+function Home({
+  onDisconnect,
+  onOpen,
+}: {
+  onDisconnect: () => void;
+  onOpen: (page: ExamplePage) => void;
+}) {
   const insets = useSafeAreaInsets();
   const notifiable = useNotifiable();
   const [email, setEmail] = useState('');
@@ -202,6 +427,14 @@ function Home({ onDisconnect }: { onDisconnect: () => void }) {
       <Status label="Permission" value={notifiable.permission} />
       <Status label="Subscriber" value={subscriber?.id ?? 'waiting'} />
       <Status label="Anonymous id" value={subscriber?.anonymousId ?? 'none'} />
+      <Status
+        label="Deep links"
+        value={
+          notifiable.deepLinks === null
+            ? 'waiting'
+            : notifiable.deepLinks.map(link => link.path).join(', ')
+        }
+      />
       <Status
         label="Error"
         value={
@@ -245,6 +478,16 @@ function Home({ onDisconnect }: { onDisconnect: () => void }) {
           );
         }}
       />
+      {pages.map(page => (
+        <Action
+          key={page.path}
+          label={page.label}
+          disabled={busy}
+          onPress={() => {
+            onOpen(page.id);
+          }}
+        />
+      ))}
       <Action label="Disconnect" onPress={onDisconnect} disabled={busy} />
     </ScrollView>
   );

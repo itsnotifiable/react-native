@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   devNotificationFreshMs,
+  notificationDeliveryId,
   selectFreshNotifications,
   type SubscriberNotification,
 } from "./inbox";
@@ -16,13 +17,28 @@ function notification(
     body: "Your message...",
     url: null,
     imageUrl: null,
+    data: null,
     alert: true,
+    status: "delivered",
     opened: false,
+    openedAt: null,
     createdAt: new Date(now - 1000).toISOString(),
     deliveryId: null,
     ...patch,
   };
 }
+
+describe("notificationDeliveryId", () => {
+  it("uses the delivery id, then the opt value on the url", () => {
+    expect(
+      notificationDeliveryId(notification({ deliveryId: "delivery_1" })),
+    ).toBe("delivery_1");
+    expect(
+      notificationDeliveryId(notification({ url: "/about?opt=delivery_2" })),
+    ).toBe("delivery_2");
+    expect(notificationDeliveryId(notification({ url: "/about" }))).toBeNull();
+  });
+});
 
 describe("selectFreshNotifications", () => {
   it("keeps an unread alert created inside the freshness window", () => {

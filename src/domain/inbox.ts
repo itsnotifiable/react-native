@@ -4,10 +4,49 @@ export interface SubscriberNotification {
   readonly body: string;
   readonly url: string | null;
   readonly imageUrl: string | null;
+  readonly data: Readonly<Record<string, unknown>> | null;
   readonly alert: boolean;
+  readonly status: string | null;
   readonly opened: boolean;
+  readonly openedAt: string | null;
   readonly createdAt: string;
   readonly deliveryId: string | null;
+}
+
+export interface InboxQuery {
+  readonly page?: number;
+  readonly opened?: boolean;
+}
+
+export interface InboxPage {
+  readonly notifications: readonly SubscriberNotification[];
+  readonly page: number;
+  readonly perPage: number;
+  readonly total: number;
+}
+
+export function notificationDeliveryId(
+  notification: SubscriberNotification,
+): string | null {
+  if (notification.deliveryId !== null && notification.deliveryId.length > 0) {
+    return notification.deliveryId;
+  }
+
+  const url = notification.url;
+
+  if (url === null) {
+    return null;
+  }
+
+  try {
+    const opt = new URL(url, "https://notifiable.invalid").searchParams.get(
+      "opt",
+    );
+
+    return opt !== null && opt.length > 0 ? opt : null;
+  } catch {
+    return null;
+  }
 }
 
 export const devNotificationFreshMs = 8000;

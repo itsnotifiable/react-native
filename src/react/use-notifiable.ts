@@ -1,5 +1,6 @@
 import { useCallback, useContext, useSyncExternalStore } from "react";
 import type { NotifiableBinding } from "../client/types";
+import type { InboxQuery } from "../domain/inbox";
 import type { IdentifyInput } from "../domain/subscriber";
 import { NotifiableError } from "../domain/errors";
 import { NotifiableContext } from "./context";
@@ -33,6 +34,23 @@ export function useNotifiable(): NotifiableBinding {
     (enabled: boolean) => client.setDevIndicator(enabled),
     [client],
   );
+  const inbox = useCallback(
+    (query?: InboxQuery) =>
+      query === undefined ? client.inbox() : client.inbox(query),
+    [client],
+  );
+  const notification = useCallback(
+    (notificationId: string) => client.notification(notificationId),
+    [client],
+  );
+  const openNotification = useCallback(
+    (notificationId: string) => client.openStoredNotification(notificationId),
+    [client],
+  );
+  const clickDelivery = useCallback(
+    (deliveryId: string) => client.clickDelivery(deliveryId),
+    [client],
+  );
 
   return {
     config: client.config,
@@ -41,10 +59,15 @@ export function useNotifiable(): NotifiableBinding {
     subscriber: snapshot.subscriber,
     clientConfig: snapshot.clientConfig,
     devIndicator: snapshot.devIndicator,
+    deepLinks: snapshot.deepLinks,
     error: snapshot.error,
     start,
     requestPermission,
     identify,
     setDevIndicator,
+    inbox,
+    notification,
+    openNotification,
+    clickDelivery,
   };
 }

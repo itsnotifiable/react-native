@@ -10,6 +10,8 @@ import type {
   SubscriberIdentity,
   SubscriberWrite,
 } from "../domain/subscriber";
+import type { DeepLink } from "../domain/deep-link";
+import type { InboxQuery } from "../domain/inbox";
 import type { DevicePort, PushPort } from "../platform/types";
 import type { SdkApi } from "../transport/sdk-api";
 import { NotifiableClientImpl } from "./notifiable-client";
@@ -43,15 +45,18 @@ function createApi(): SdkApi & {
   readonly saves: SubscriberWrite[];
   readonly updates: Array<{ id: string; identity: SubscriberIdentity }>;
   readonly inbox: string[];
+  readonly deepLinks: DeepLink[][];
 } {
   const saves: SubscriberWrite[] = [];
   const updates: Array<{ id: string; identity: SubscriberIdentity }> = [];
   const inbox: string[] = [];
+  const deepLinks: DeepLink[][] = [];
 
   return {
     saves,
     updates,
     inbox,
+    deepLinks,
     getClientConfig: vi.fn(() =>
       Promise.resolve({
         environment: null,
@@ -65,9 +70,35 @@ function createApi(): SdkApi & {
       saves.push(write);
       return Promise.resolve(subscriberFrom(write));
     }),
-    listNotifications: vi.fn((subscriberId: string) => {
-      inbox.push(`list ${subscriberId}`);
-      return Promise.resolve([]);
+    listNotifications: vi.fn((subscriberId: string, query?: InboxQuery) => {
+      inbox.push(
+        query === undefined
+          ? `list ${subscriberId}`
+          : `list ${subscriberId} page=${query.page ?? ""} opened=${String(query.opened)}`,
+      );
+      return Promise.resolve({
+        notifications: [],
+        page: query?.page ?? 1,
+        perPage: 20,
+        total: 0,
+      });
+    }),
+    getNotification: vi.fn((subscriberId: string, notificationId: string) => {
+      inbox.push(`get ${subscriberId} ${notificationId}`);
+      return Promise.resolve({
+        id: notificationId,
+        title: "Hello",
+        body: "There",
+        url: null,
+        imageUrl: null,
+        data: null,
+        alert: true,
+        status: "delivered",
+        opened: false,
+        openedAt: null,
+        createdAt: "2026-10-13T17:29:20.897Z",
+        deliveryId: null,
+      });
     }),
     openNotification: vi.fn((subscriberId: string, notificationId: string) => {
       inbox.push(`open ${subscriberId} ${notificationId}`);
@@ -76,6 +107,14 @@ function createApi(): SdkApi & {
     clickDelivery: vi.fn((deliveryId: string) => {
       inbox.push(`click ${deliveryId}`);
       return Promise.resolve();
+    }),
+    saveDeepLinks: vi.fn((links: readonly DeepLink[]) => {
+      const saved = links.map((link) => ({
+        path: link.path,
+        label: link.label,
+      }));
+      deepLinks.push(saved);
+      return Promise.resolve(saved);
     }),
     updateSubscriber: vi.fn((id: string, identity: SubscriberIdentity) => {
       updates.push({ id, identity });
@@ -97,6 +136,7 @@ function createClient(
   storage: KeyValueStore,
   push?: PushPort,
   api: SdkApi = createApi(),
+  deepLinks?: readonly DeepLink[],
 ): NotifiableClientImpl {
   return new NotifiableClientImpl(
     {
@@ -104,6 +144,7 @@ function createClient(
       environment: "local",
       baseUrl: "http://127.0.0.1:8000/api",
       ...(push !== undefined ? { push } : {}),
+      ...(deepLinks !== undefined ? { deepLinks } : {}),
       storage,
       device,
     },
@@ -297,7 +338,10 @@ describe("subscriber registration", () => {
     const api = createApi();
     const client = createClient(createMemoryStorage(), undefined, api);
 
-    await expect(client.listNotifications("sub_1")).resolves.toEqual([]);
+    await expect(client.listNotifications("sub_1")).resolves.toMatchObject({
+      notifications: [],
+      page: 1,
+    });
     await client.openNotification("sub_1", "note_1");
     await client.clickDelivery("delivery_1");
 
@@ -307,5 +351,43 @@ describe("subscriber registration", () => {
       "click delivery_1",
     ]);
     expect(api.saves).toEqual([]);
+  });
+
+  it("saves the app deep links after the subscriber connects", async () => {
+    const api = createApi();
+    const links = [
+      { path: "/about", label: "About Notifiable" },
+      { path: "/inbox", label: "Inbox" },
+    ];
+    const client = createClient(createMemoryStorage(), undefined, api, links);
+
+    await client.start();
+
+    expect(api.deepLinks).toEqual([links]);
+    expect(client.getSnapshot().deepLinks).toEqual(links);
+  });
+
+  it("lists the connected subscriber inbox without an id argument", async () => {
+    const api = createApi();
+    const client = createClient(createMemoryStorage(), undefined, api);
+
+    await client.start();
+    await expect(
+      client.inbox({ page: 2, opened: false }),
+    ).resolves.toMatchObject({
+      page: 2,
+      perPage: 20,
+      total: 0,
+    });
+    await expect(client.notification("note_1")).resolves.toMatchObject({
+      id: "note_1",
+    });
+    await client.openStoredNotification("note_1");
+
+    expect(api.inbox).toEqual([
+      "list sub_1 page=2 opened=false",
+      "get sub_1 note_1",
+      "open sub_1 note_1",
+    ]);
   });
 });

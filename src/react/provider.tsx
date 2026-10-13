@@ -18,6 +18,8 @@ export interface NotifiableProviderProps extends Partial<
     | "push"
     | "storage"
     | "device"
+    | "deepLinks"
+    | "onDeepLink"
   >
 > {
   readonly client?: NotifiableClient;
@@ -34,6 +36,8 @@ export function NotifiableProvider({
   push,
   storage,
   device,
+  deepLinks,
+  onDeepLink,
 }: NotifiableProviderProps): React.JSX.Element {
   const resolved = useMemo(() => {
     if (client !== undefined) {
@@ -57,8 +61,21 @@ export function NotifiableProvider({
       ...(push !== undefined ? { push } : {}),
       ...(storage !== undefined ? { storage } : {}),
       ...(device !== undefined ? { device } : {}),
+      ...(deepLinks !== undefined ? { deepLinks } : {}),
+      ...(onDeepLink !== undefined ? { onDeepLink } : {}),
     });
-  }, [client, publicKey, environment, baseUrl, logger, push, storage, device]);
+  }, [
+    client,
+    publicKey,
+    environment,
+    baseUrl,
+    logger,
+    push,
+    storage,
+    device,
+    deepLinks,
+    onDeepLink,
+  ]);
 
   useEffect(() => {
     void resolved.start().catch(() => undefined);

@@ -281,25 +281,35 @@ describe("sdk api", () => {
       }),
     );
 
-    await expect(api.listNotifications("sub 1")).resolves.toEqual([
-      {
-        id: "note_1",
-        title: "Your notification title",
-        body: "Your message...",
-        url: null,
-        imageUrl: null,
-        alert: true,
-        opened: false,
-        createdAt: "2026-10-13T17:29:20.897Z",
-        deliveryId: "delivery_1",
-      },
-    ]);
+    await expect(
+      api.listNotifications("sub 1", { page: 1, opened: false }),
+    ).resolves.toEqual({
+      notifications: [
+        {
+          id: "note_1",
+          title: "Your notification title",
+          body: "Your message...",
+          url: null,
+          imageUrl: null,
+          data: null,
+          alert: true,
+          status: "delivered",
+          opened: false,
+          openedAt: null,
+          createdAt: "2026-10-13T17:29:20.897Z",
+          deliveryId: "delivery_1",
+        },
+      ],
+      page: 1,
+      perPage: 5,
+      total: 1,
+    });
     await api.openNotification("sub 1", "note 1");
     await api.clickDelivery("delivery 1");
 
     expect(calls.map((call) => call.method)).toEqual(["GET", "POST", "POST"]);
     expect(calls[0]?.url).toBe(
-      "http://127.0.0.1:8000/api/v1/sdk/subscribers/sub%201/notifications?page=1&per_page=5&opened=false",
+      "http://127.0.0.1:8000/api/v1/sdk/subscribers/sub%201/notifications?page=1&opened=false",
     );
     expect(calls[1]?.url).toBe(
       "http://127.0.0.1:8000/api/v1/sdk/subscribers/sub%201/notifications/note%201/open",
@@ -307,6 +317,49 @@ describe("sdk api", () => {
     expect(calls[2]?.url).toBe(
       "http://127.0.0.1:8000/api/v1/sdk/deliveries/delivery%201/click",
     );
+  });
+
+  it("saves deep links for the public key", async () => {
+    let request: {
+      url: string;
+      method: string | undefined;
+      body: string | undefined;
+    } = { url: "", method: undefined, body: undefined };
+    const fetchImpl: FetchLike = (url, init) => {
+      request = { url, method: init?.method, body: init?.body };
+      return Promise.resolve(
+        jsonResponse(
+          200,
+          envelope(
+            {
+              links: [
+                { path: "/about", label: "About Notifiable" },
+                { path: "", label: "Skip" },
+              ],
+            },
+            "DEEP_LINKS_SAVED",
+          ),
+        ),
+      );
+    };
+    const api = createSdkApi(
+      createHttpClient({
+        baseUrl: "http://127.0.0.1:8000/api",
+        publicKey: "ntf_pub_test",
+        fetch: fetchImpl,
+      }),
+    );
+
+    await expect(
+      api.saveDeepLinks([{ path: "/about", label: "About Notifiable" }]),
+    ).resolves.toEqual([{ path: "/about", label: "About Notifiable" }]);
+    expect(request).toEqual({
+      url: "http://127.0.0.1:8000/api/v1/sdk/deep-links",
+      method: "POST",
+      body: JSON.stringify({
+        links: [{ path: "/about", label: "About Notifiable" }],
+      }),
+    });
   });
 
   it("reports network failures", async () => {

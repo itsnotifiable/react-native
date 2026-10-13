@@ -11,6 +11,7 @@ import {
 import type { NotifiableClient } from "../client/types";
 import { NotifiableError } from "../domain/errors";
 import {
+  notificationDeliveryId,
   selectFreshNotifications,
   type SubscriberNotification,
 } from "../domain/inbox";
@@ -87,10 +88,18 @@ export function DevToasts(): React.JSX.Element | null {
           .catch(() => undefined);
       }}
       onPress={() => {
-        const deliveryId = current.notification.deliveryId;
+        const deliveryId = notificationDeliveryId(current.notification);
 
         if (deliveryId !== null) {
           void client.clickDelivery(deliveryId).catch(() => undefined);
+        }
+
+        const url = current.notification.url;
+        const openDeepLink = client.config.onDeepLink;
+
+        if (url !== null && openDeepLink !== undefined) {
+          console.info(`[Notifiable] Opening ${url}`);
+          openDeepLink(url);
         }
       }}
       onDismiss={advance}
@@ -154,7 +163,12 @@ function pollInbox(
     console.info(`[Notifiable] Polling notifications for ${subscriberId}`);
 
     try {
-      const notifications = await client.listNotifications(subscriberId);
+      const notifications = (
+        await client.listNotifications(subscriberId, {
+          page: 1,
+          opened: false,
+        })
+      ).notifications;
 
       if (isPollStopped(poll)) {
         return;

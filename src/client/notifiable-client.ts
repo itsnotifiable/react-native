@@ -4,8 +4,13 @@ import { createId } from "../internal/id";
 import { loadDevIndicator, saveDevIndicator } from "../internal/dev-indicator";
 import { loadSession, saveSession } from "../internal/session";
 import { loadDefaultStorage } from "../internal/storage";
+import type { DeepLink } from "../domain/deep-link";
 import type { DevIndicatorChoice } from "../domain/dev-indicator";
-import type { SubscriberNotification } from "../domain/inbox";
+import type {
+  InboxPage,
+  InboxQuery,
+  SubscriberNotification,
+} from "../domain/inbox";
 import type { Logger } from "../domain/logger";
 import type { KeyValueStore } from "../domain/storage";
 import type {
@@ -32,6 +37,7 @@ const initialSnapshot: NotifiableSnapshot = {
   subscriber: null,
   clientConfig: null,
   devIndicator: null,
+  deepLinks: null,
   error: null,
 };
 
@@ -82,13 +88,32 @@ export class NotifiableClientImpl implements NotifiableClient {
 
   readonly listNotifications = (
     subscriberId: string,
-  ): Promise<readonly SubscriberNotification[]> =>
-    this.#api.listNotifications(subscriberId);
+    query?: InboxQuery,
+  ): Promise<InboxPage> =>
+    query === undefined
+      ? this.#api.listNotifications(subscriberId)
+      : this.#api.listNotifications(subscriberId, query);
+
+  readonly inbox = (query?: InboxQuery): Promise<InboxPage> => {
+    const subscriberId = this.#requireSubscriberId();
+
+    return query === undefined
+      ? this.#api.listNotifications(subscriberId)
+      : this.#api.listNotifications(subscriberId, query);
+  };
+
+  readonly notification = (
+    notificationId: string,
+  ): Promise<SubscriberNotification> =>
+    this.#api.getNotification(this.#requireSubscriberId(), notificationId);
 
   readonly openNotification = (
     subscriberId: string,
     notificationId: string,
   ): Promise<void> => this.#api.openNotification(subscriberId, notificationId);
+
+  readonly openStoredNotification = (notificationId: string): Promise<void> =>
+    this.#api.openNotification(this.#requireSubscriberId(), notificationId);
 
   readonly clickDelivery = (deliveryId: string): Promise<void> =>
     this.#api.clickDelivery(deliveryId);
@@ -138,6 +163,7 @@ export class NotifiableClientImpl implements NotifiableClient {
       const clientConfig = await this.#api.getClientConfig();
       this.#commit({ clientConfig, devIndicator });
       await this.#syncDevice({ prompted: false });
+      await this.#saveDeepLinks();
     });
   }
 
@@ -288,6 +314,18 @@ export class NotifiableClientImpl implements NotifiableClient {
     return { token, provider: push.provider };
   }
 
+  async #saveDeepLinks(): Promise<void> {
+    const links = this.config.deepLinks;
+
+    if (links === undefined) {
+      return;
+    }
+
+    const saved = await this.#api.saveDeepLinks(links);
+    this.#commit({ deepLinks: saved });
+    this.#logger.info("Deep links saved", { count: saved.length });
+  }
+
   async #setDevIndicator(enabled: boolean): Promise<void> {
     const storage = await this.#resolveStorage();
     const devIndicator: DevIndicatorChoice = enabled ? "enabled" : "disabled";
@@ -316,6 +354,19 @@ export class NotifiableClientImpl implements NotifiableClient {
     return this.#session;
   }
 
+  #requireSubscriberId(): string {
+    const subscriberId = this.#requireSession().subscriberId;
+
+    if (subscriberId === null) {
+      throw new NotifiableError({
+        code: "subscriber_not_found",
+        message: "The subscriber is not registered yet.",
+      });
+    }
+
+    return subscriberId;
+  }
+
   async #guard<T>(task: () => Promise<T>): Promise<T> {
     try {
       return await task();
@@ -332,6 +383,7 @@ export class NotifiableClientImpl implements NotifiableClient {
     readonly subscriber?: Subscriber | null;
     readonly clientConfig?: DeliveryConfig | null;
     readonly devIndicator?: DevIndicatorChoice | null;
+    readonly deepLinks?: readonly DeepLink[] | null;
     readonly error?: NotifiableError | null;
   }): void {
     this.#snapshot = {
@@ -352,6 +404,10 @@ export class NotifiableClientImpl implements NotifiableClient {
         patch.devIndicator !== undefined
           ? patch.devIndicator
           : this.#snapshot.devIndicator,
+      deepLinks:
+        patch.deepLinks !== undefined
+          ? patch.deepLinks
+          : this.#snapshot.deepLinks,
       error: patch.error !== undefined ? patch.error : this.#snapshot.error,
     };
 

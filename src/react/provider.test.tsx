@@ -53,6 +53,7 @@ describe("useNotifiable", () => {
       subscriber: null,
       clientConfig: null,
       devIndicator: null,
+      deepLinks: null,
       error: null,
     };
     const start = vi.fn(() => Promise.resolve());
@@ -66,8 +67,25 @@ describe("useNotifiable", () => {
       requestPermission: vi.fn(() => Promise.resolve("denied" as const)),
       identify: vi.fn(),
       setDevIndicator: vi.fn(() => Promise.resolve()),
-      listNotifications: vi.fn(() => Promise.resolve([])),
+      listNotifications: vi.fn(() =>
+        Promise.resolve({
+          notifications: [],
+          page: 1,
+          perPage: 20,
+          total: 0,
+        }),
+      ),
+      inbox: vi.fn(() =>
+        Promise.resolve({
+          notifications: [],
+          page: 1,
+          perPage: 20,
+          total: 0,
+        }),
+      ),
+      notification: vi.fn(),
       openNotification: vi.fn(() => Promise.resolve()),
+      openStoredNotification: vi.fn(() => Promise.resolve()),
       clickDelivery: vi.fn(() => Promise.resolve()),
       subscribe: () => () => undefined,
       getSnapshot: () => snapshot,

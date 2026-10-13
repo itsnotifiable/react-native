@@ -2,10 +2,13 @@ export { createNotifiable } from "./client/create-client";
 export type {
   ClientApp,
   ClientEnvironment,
+  DeepLink,
   DeliveryConfig,
   DevIndicatorChoice,
   DevicePort,
   IdentifyInput,
+  InboxPage,
+  InboxQuery,
   KeyValueStore,
   Logger,
   NotifiableBinding,

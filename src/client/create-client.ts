@@ -52,5 +52,9 @@ function copyConfig(
     ...(config.push !== undefined ? { push: config.push } : {}),
     ...(config.storage !== undefined ? { storage: config.storage } : {}),
     ...(config.device !== undefined ? { device: config.device } : {}),
+    ...(config.deepLinks !== undefined ? { deepLinks: config.deepLinks } : {}),
+    ...(config.onDeepLink !== undefined
+      ? { onDeepLink: config.onDeepLink }
+      : {}),
   };
 }
