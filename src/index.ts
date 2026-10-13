@@ -1,5 +1,9 @@
 export { createNotifiable } from "./client/create-client";
 export type {
+  ClientApp,
+  ClientEnvironment,
+  DeliveryConfig,
+  DevIndicatorChoice,
   DevicePort,
   IdentifyInput,
   KeyValueStore,
@@ -13,6 +17,7 @@ export type {
   PushPort,
   PushProvider,
   Subscriber,
+  SubscriberNotification,
 } from "./client/types";
 export { NotifiableError, notifiableErrorCodes } from "./domain/errors";
 export type { NotifiableErrorCode } from "./domain/errors";

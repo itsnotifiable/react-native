@@ -4,6 +4,7 @@ import { createMemoryStorage } from "../internal/memory-storage";
 import { sessionKey } from "../internal/session";
 import type { KeyValueStore } from "../domain/storage";
 import type {
+  DeliveryConfig,
   IdentifyInput,
   Subscriber,
   SubscriberIdentity,
@@ -41,19 +42,40 @@ function subscriberFrom(write: SubscriberWrite): Subscriber {
 function createApi(): SdkApi & {
   readonly saves: SubscriberWrite[];
   readonly updates: Array<{ id: string; identity: SubscriberIdentity }>;
+  readonly inbox: string[];
 } {
   const saves: SubscriberWrite[] = [];
   const updates: Array<{ id: string; identity: SubscriberIdentity }> = [];
+  const inbox: string[] = [];
 
   return {
     saves,
     updates,
+    inbox,
     getClientConfig: vi.fn(() =>
-      Promise.resolve({ android: null, ios: null, web: null }),
+      Promise.resolve({
+        environment: null,
+        app: null,
+        android: null,
+        ios: null,
+        web: null,
+      }),
     ),
     saveSubscriber: vi.fn((write: SubscriberWrite) => {
       saves.push(write);
       return Promise.resolve(subscriberFrom(write));
+    }),
+    listNotifications: vi.fn((subscriberId: string) => {
+      inbox.push(`list ${subscriberId}`);
+      return Promise.resolve([]);
+    }),
+    openNotification: vi.fn((subscriberId: string, notificationId: string) => {
+      inbox.push(`open ${subscriberId} ${notificationId}`);
+      return Promise.resolve();
+    }),
+    clickDelivery: vi.fn((deliveryId: string) => {
+      inbox.push(`click ${deliveryId}`);
+      return Promise.resolve();
     }),
     updateSubscriber: vi.fn((id: string, identity: SubscriberIdentity) => {
       updates.push({ id, identity });
@@ -91,7 +113,51 @@ function createClient(
   );
 }
 
+const shopConfig: DeliveryConfig = {
+  environment: "development",
+  app: {
+    name: "Shop",
+    description: "Order alerts",
+    icon: "https://cdn.example/mark.png",
+  },
+  android: null,
+  ios: { bundle_id: "com.example.app" },
+  web: null,
+};
+
 describe("subscriber registration", () => {
+  it("remembers whether the development mark is shown", async () => {
+    const storage = createMemoryStorage();
+    const client = createClient(storage);
+
+    await client.start();
+    expect(client.getSnapshot().devIndicator).toBeNull();
+
+    await client.setDevIndicator(true);
+    expect(client.getSnapshot().devIndicator).toBe("enabled");
+
+    const again = createClient(storage);
+    await again.start();
+    expect(again.getSnapshot().devIndicator).toBe("enabled");
+  });
+
+  it("stores the client configuration before the subscriber save", async () => {
+    const api = createApi();
+    const failing: SdkApi = {
+      ...api,
+      getClientConfig: () => Promise.resolve(shopConfig),
+      saveSubscriber: () => Promise.reject(new Error("offline")),
+    };
+    const client = createClient(createMemoryStorage(), undefined, failing);
+
+    await expect(client.start()).rejects.toMatchObject({
+      code: "network",
+      message: "offline",
+    });
+    expect(client.getSnapshot().clientConfig).toEqual(shopConfig);
+    expect(client.getSnapshot().ready).toBe(false);
+  });
+
   it("registers when permission is denied and omits the token", async () => {
     const api = createApi();
     const push: PushPort = {
@@ -225,5 +291,21 @@ describe("subscriber registration", () => {
       subscriberId: "sub_1",
       anonymousId: null,
     });
+  });
+
+  it("lists and records notifications without the registration queue", async () => {
+    const api = createApi();
+    const client = createClient(createMemoryStorage(), undefined, api);
+
+    await expect(client.listNotifications("sub_1")).resolves.toEqual([]);
+    await client.openNotification("sub_1", "note_1");
+    await client.clickDelivery("delivery_1");
+
+    expect(api.inbox).toEqual([
+      "list sub_1",
+      "open sub_1 note_1",
+      "click delivery_1",
+    ]);
+    expect(api.saves).toEqual([]);
   });
 });

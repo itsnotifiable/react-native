@@ -42,7 +42,7 @@ Keep these flags:
 "main": "./lib/index.js",
 "types": "./lib/index.d.ts",
 "react-native": "./src/index.ts",
-"files": ["src", "lib"],
+"files": ["src", "lib", "ios", "notifiable-react-native.podspec"],
 "exports": {
   ".": {
     "types": "./lib/index.d.ts",

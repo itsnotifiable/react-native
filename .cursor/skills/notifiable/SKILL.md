@@ -19,7 +19,7 @@ The marketing site shows a singleton-style API (`Notifiable.configure`, `request
 
 ## This package
 
-`@notifiable/react-native` is the React Native SDK. It connects with a public key, registers a subscriber even when push permission is denied, and identifies that subscriber by email. Inbox, events, deep links, and notification display are not implemented. This package does not ship Firebase, APNs, or Expo. The app passes a `PushPort`.
+`@notifiable/react-native` is the React Native SDK. It connects with a public key, registers a subscriber even when push permission is denied, and identifies that subscriber by email. Events, deep links, and production notification display are not implemented. A development key polls recent unread notifications and shows each one once as a bottom toast. This package does not ship Firebase, APNs, or Expo. The app passes a `PushPort`.
 
 Consumers install it with `npm install @notifiable/react-native` and import only from `@notifiable/react-native`. Deep imports are not public. Persistent sessions need the optional peer `@react-native-async-storage/async-storage`, or a `storage` object on the config.
 
@@ -48,7 +48,7 @@ await requestPermission();
 await identify({ email: "ada@example.com", externalId: "user_123" });
 ```
 
-`createNotifiable` trims `publicKey` and throws `invalid_config` when it is blank. The provider builds a client from `publicKey` or accepts an existing `client`, then calls `start()` on mount. `start()` does not prompt. It loads the session, checks the key with `GET /v1/sdk/client-config`, and upserts `POST /v1/sdk/subscribers`. The same `device_id` updates the existing subscriber. `token` and `provider` are sent only when permission is `granted` and `getToken()` returns a string. A granted permission with an empty token throws `missing_token` and does not register that grant.
+`createNotifiable` trims `publicKey` and throws `invalid_config` when it is blank. The provider builds a client from `publicKey` or accepts an existing `client`, then calls `start()` on mount. `start()` does not prompt. It loads the session, checks the key with `GET /v1/sdk/client-config`, stores that payload on `clientConfig`, and upserts `POST /v1/sdk/subscribers`. When `clientConfig.environment` is `development` and `devIndicator` is unset, the provider first shows a sheet that explains Notifiable and asks to show or hide the mark. Showing it stores `enabled` and puts a larger mark on screen, filled with the Notifiable icon from `https://notifiable.sh/favicon.png`. Dragging parks it on the nearest edge — top, right, bottom, or left — with space from the screen edge, and it stays there after the sheet closes. Tapping the mark slides open the app name, description, icon, and configured iOS bundle id or Android package name. Hiding it stores `disabled` under `notifiable.dev-indicator.` plus the public key. On the iOS simulator, Command N shows the mark again, including while a text field is focused. The shortcut is registered by the iOS module in `ios/NotifiableKeyCommand.m`, and only while a development app is mounted. The sheet labels Development with an amber warning pill. While that subscriber id exists and the app is in the foreground, the provider polls `GET /v1/sdk/subscribers/{id}/notifications` every 5 seconds, shows each unread alert from the last 8 seconds once as a bottom toast, then records the open. A tap records a delivery click only when the notification includes `delivery_id`. A 429 slows the poll; a 401 or a missing subscriber stops it until the subscriber changes. Hiding the mark does not stop the poll. A production key does not show the sheet, the mark, or the toasts. The same `device_id` updates the existing subscriber. `token` and `provider` are sent only when permission is `granted` and `getToken()` returns a string. A granted permission with an empty token throws `missing_token` and does not register that grant.
 
 `identify` patches `/v1/sdk/subscribers/{id}`. When `email` or `externalId` is set, the patch also sends `anonymous_id: null`. The first save sends a generated `anonymous_id`. Later device syncs omit identity fields.
 
@@ -66,11 +66,16 @@ The stored session is `deviceId`, `subscriberId`, `pushToken`, and `anonymousId`
 | `NotifiableConfig`        | type      | `publicKey`, optional `environment`, `baseUrl`, `logger`, `push`, `storage`, `device` |
 | `NotifiableClient`        | type      | Config, start, permission, identify, snapshot                                         |
 | `NotifiableBinding`       | type      | Hook value: config, snapshot, and commands                                            |
-| `NotifiableSnapshot`      | type      | `ready`, `permission`, `subscriber`, `error`                                          |
+| `NotifiableSnapshot`      | type      | `ready`, `permission`, `subscriber`, `clientConfig`, `devIndicator`, `error`          |
+| `DevIndicatorChoice`      | type      | `enabled` or `disabled` for the development mark                                      |
+| `DeliveryConfig`          | type      | Client-config environment, app, and platform records                                  |
+| `ClientApp`               | type      | App name, description, and icon                                                       |
+| `ClientEnvironment`       | type      | `development` or `production` from client-config                                      |
 | `PushPort`                | type      | App-supplied permission and token source                                              |
 | `DevicePort`              | type      | Optional device profile override                                                      |
 | `KeyValueStore`           | type      | Optional session storage                                                              |
 | `Subscriber`              | type      | Subscriber returned by the API                                                        |
+| `SubscriberNotification`  | type      | One inbox notification, including an optional delivery id                             |
 | `IdentifyInput`           | type      | Email, external id, and name                                                          |
 | `PermissionStatus`        | type      | `granted`, `denied`, `not_determined`                                                 |
 | `PushProvider`            | type      | `apns`, `fcm`, `expo`, `web_push`                                                     |

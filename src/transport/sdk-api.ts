@@ -1,4 +1,5 @@
 import { NotifiableError } from "../domain/errors";
+import type { SubscriberNotification } from "../domain/inbox";
 import { isRecord } from "../domain/record";
 import {
   isDevicePlatform,
@@ -18,6 +19,11 @@ export interface SdkApi {
     subscriberId: string,
     identity: SubscriberIdentity,
   ): Promise<Subscriber>;
+  listNotifications(
+    subscriberId: string,
+  ): Promise<readonly SubscriberNotification[]>;
+  openNotification(subscriberId: string, notificationId: string): Promise<void>;
+  clickDelivery(deliveryId: string): Promise<void>;
 }
 
 export function createSdkApi(http: HttpClient): SdkApi {
@@ -52,6 +58,34 @@ export function createSdkApi(http: HttpClient): SdkApi {
       });
 
       return parseSubscriber(data);
+    },
+
+    async listNotifications(
+      subscriberId: string,
+    ): Promise<readonly SubscriberNotification[]> {
+      const data = await http.request({
+        method: "GET",
+        path: `/v1/sdk/subscribers/${encodeURIComponent(subscriberId)}/notifications?page=1&per_page=5&opened=false`,
+      });
+
+      return parseNotificationList(data);
+    },
+
+    async openNotification(
+      subscriberId: string,
+      notificationId: string,
+    ): Promise<void> {
+      await http.request({
+        method: "POST",
+        path: `/v1/sdk/subscribers/${encodeURIComponent(subscriberId)}/notifications/${encodeURIComponent(notificationId)}/open`,
+      });
+    },
+
+    async clickDelivery(deliveryId: string): Promise<void> {
+      await http.request({
+        method: "POST",
+        path: `/v1/sdk/deliveries/${encodeURIComponent(deliveryId)}/click`,
+      });
     },
   };
 }
@@ -94,12 +128,19 @@ function omitUndefined(
   );
 }
 
+const emptyDeliveryConfig: DeliveryConfig = {
+  environment: null,
+  app: null,
+  android: null,
+  ios: null,
+  web: null,
+};
+
 function parseDeliveryConfig(data: unknown): DeliveryConfig {
-  // An app with no configured platform is a successful key check. PHP
-  // json-encodes that empty map as [], not {}.
+  // An app with no configured platform used to be an empty PHP list.
   if (Array.isArray(data)) {
     if (data.length === 0) {
-      return { android: null, ios: null, web: null };
+      return emptyDeliveryConfig;
     }
 
     throw invalidClientConfig();
@@ -110,10 +151,36 @@ function parseDeliveryConfig(data: unknown): DeliveryConfig {
   }
 
   return {
+    environment: clientEnvironment(data.environment),
+    app: parseClientApp(data.app),
     android: recordOrNull(data.android),
     ios: recordOrNull(data.ios),
     web: recordOrNull(data.web),
   };
+}
+
+function clientEnvironment(value: unknown): DeliveryConfig["environment"] {
+  if (value === "development" || value === "production") {
+    return value;
+  }
+
+  return null;
+}
+
+function parseClientApp(value: unknown): DeliveryConfig["app"] {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    name: textOrNull(value.name),
+    description: textOrNull(value.description),
+    icon: textOrNull(value.icon),
+  };
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 function invalidClientConfig(): NotifiableError {
@@ -166,4 +233,53 @@ function recordOrNull(
   value: unknown,
 ): Readonly<Record<string, unknown>> | null {
   return isRecord(value) ? value : null;
+}
+
+function parseNotificationList(
+  data: unknown,
+): readonly SubscriberNotification[] {
+  if (!isRecord(data) || !Array.isArray(data.notifications)) {
+    throw new NotifiableError({
+      code: "network",
+      message: "The notification list was invalid.",
+    });
+  }
+
+  const notifications: SubscriberNotification[] = [];
+
+  for (const entry of data.notifications) {
+    const notification = parseNotification(entry);
+
+    if (notification !== null) {
+      notifications.push(notification);
+    }
+  }
+
+  return notifications;
+}
+
+function parseNotification(value: unknown): SubscriberNotification | null {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    value.id.length === 0 ||
+    typeof value.title !== "string" ||
+    typeof value.body !== "string" ||
+    typeof value.opened !== "boolean" ||
+    typeof value.created_at !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    id: value.id,
+    title: value.title,
+    body: value.body,
+    url: textOrNull(value.url),
+    imageUrl: textOrNull(value.image_url),
+    alert: typeof value.alert === "boolean" ? value.alert : true,
+    opened: value.opened,
+    createdAt: value.created_at,
+    deliveryId: textOrNull(value.delivery_id),
+  };
 }

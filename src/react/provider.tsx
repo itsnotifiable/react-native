@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, type ReactNode } from "react";
+import { StyleSheet, View } from "react-native";
 import { createNotifiable } from "../client/create-client";
 import type { NotifiableClient, NotifiableConfig } from "../client/types";
 import { NotifiableError } from "../domain/errors";
 import { NotifiableContext } from "./context";
+import { DevelopmentBadge } from "./dev-indicator";
+import { DevToasts } from "./dev-toasts";
+import { useNotifiable } from "./use-notifiable";
 
 export interface NotifiableProviderProps extends Partial<
   Pick<
@@ -62,7 +66,34 @@ export function NotifiableProvider({
 
   return (
     <NotifiableContext.Provider value={resolved}>
-      {children}
+      <DevelopmentHost>{children}</DevelopmentHost>
     </NotifiableContext.Provider>
   );
 }
+
+function DevelopmentHost({
+  children,
+}: {
+  readonly children: ReactNode;
+}): React.JSX.Element {
+  const { clientConfig } = useNotifiable();
+
+  if (clientConfig?.environment !== "development") {
+    return <>{children}</>;
+  }
+
+  return (
+    <View style={styles.developmentHost} pointerEvents="box-none">
+      <DevelopmentBadge clientConfig={clientConfig}>
+        {children}
+      </DevelopmentBadge>
+      <DevToasts />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  developmentHost: {
+    flex: 1,
+  },
+});

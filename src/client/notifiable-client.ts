@@ -1,11 +1,15 @@
 import { asNotifiableError, NotifiableError } from "../domain/errors";
 import { resolveLogger } from "../internal/logger";
 import { createId } from "../internal/id";
+import { loadDevIndicator, saveDevIndicator } from "../internal/dev-indicator";
 import { loadSession, saveSession } from "../internal/session";
 import { loadDefaultStorage } from "../internal/storage";
+import type { DevIndicatorChoice } from "../domain/dev-indicator";
+import type { SubscriberNotification } from "../domain/inbox";
 import type { Logger } from "../domain/logger";
 import type { KeyValueStore } from "../domain/storage";
 import type {
+  DeliveryConfig,
   IdentifyInput,
   PermissionStatus,
   PushProvider,
@@ -26,6 +30,8 @@ const initialSnapshot: NotifiableSnapshot = {
   ready: false,
   permission: "not_determined",
   subscriber: null,
+  clientConfig: null,
+  devIndicator: null,
   error: null,
 };
 
@@ -71,6 +77,22 @@ export class NotifiableClientImpl implements NotifiableClient {
       return this.#identify(input);
     });
 
+  readonly setDevIndicator = (enabled: boolean): Promise<void> =>
+    this.#setDevIndicator(enabled);
+
+  readonly listNotifications = (
+    subscriberId: string,
+  ): Promise<readonly SubscriberNotification[]> =>
+    this.#api.listNotifications(subscriberId);
+
+  readonly openNotification = (
+    subscriberId: string,
+    notificationId: string,
+  ): Promise<void> => this.#api.openNotification(subscriberId, notificationId);
+
+  readonly clickDelivery = (deliveryId: string): Promise<void> =>
+    this.#api.clickDelivery(deliveryId);
+
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
     return () => {
@@ -109,7 +131,12 @@ export class NotifiableClientImpl implements NotifiableClient {
       }
 
       this.#session = session;
-      await this.#api.getClientConfig();
+      const devIndicator = await loadDevIndicator(
+        storage,
+        this.config.publicKey,
+      );
+      const clientConfig = await this.#api.getClientConfig();
+      this.#commit({ clientConfig, devIndicator });
       await this.#syncDevice({ prompted: false });
     });
   }
@@ -261,6 +288,13 @@ export class NotifiableClientImpl implements NotifiableClient {
     return { token, provider: push.provider };
   }
 
+  async #setDevIndicator(enabled: boolean): Promise<void> {
+    const storage = await this.#resolveStorage();
+    const devIndicator: DevIndicatorChoice = enabled ? "enabled" : "disabled";
+    await saveDevIndicator(storage, this.config.publicKey, devIndicator);
+    this.#commit({ devIndicator });
+  }
+
   async #resolveStorage(): Promise<KeyValueStore> {
     if (this.#storage !== undefined) {
       return this.#storage;
@@ -296,6 +330,8 @@ export class NotifiableClientImpl implements NotifiableClient {
     readonly ready?: boolean;
     readonly permission?: PermissionStatus;
     readonly subscriber?: Subscriber | null;
+    readonly clientConfig?: DeliveryConfig | null;
+    readonly devIndicator?: DevIndicatorChoice | null;
     readonly error?: NotifiableError | null;
   }): void {
     this.#snapshot = {
@@ -308,6 +344,14 @@ export class NotifiableClientImpl implements NotifiableClient {
         patch.subscriber !== undefined
           ? patch.subscriber
           : this.#snapshot.subscriber,
+      clientConfig:
+        patch.clientConfig !== undefined
+          ? patch.clientConfig
+          : this.#snapshot.clientConfig,
+      devIndicator:
+        patch.devIndicator !== undefined
+          ? patch.devIndicator
+          : this.#snapshot.devIndicator,
       error: patch.error !== undefined ? patch.error : this.#snapshot.error,
     };
 

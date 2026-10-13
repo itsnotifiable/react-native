@@ -20,7 +20,9 @@
   "react-native": "./src/index.ts",
   "files": [
     "src",
-    "lib"
+    "lib",
+    "ios",
+    "notifiable-react-native.podspec"
   ],
   "exports": {
     ".": {

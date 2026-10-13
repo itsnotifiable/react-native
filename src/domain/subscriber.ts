@@ -61,7 +61,17 @@ export interface IdentifyInput {
   readonly lastName?: string | null;
 }
 
+export type ClientEnvironment = "development" | "production";
+
+export interface ClientApp {
+  readonly name: string | null;
+  readonly description: string | null;
+  readonly icon: string | null;
+}
+
 export interface DeliveryConfig {
+  readonly environment: ClientEnvironment | null;
+  readonly app: ClientApp | null;
   readonly android: Readonly<Record<string, unknown>> | null;
   readonly ios: Readonly<Record<string, unknown>> | null;
   readonly web: Readonly<Record<string, unknown>> | null;

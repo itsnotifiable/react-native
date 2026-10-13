@@ -29,15 +29,22 @@ export function useNotifiable(): NotifiableBinding {
     (input: IdentifyInput) => client.identify(input),
     [client],
   );
+  const setDevIndicator = useCallback(
+    (enabled: boolean) => client.setDevIndicator(enabled),
+    [client],
+  );
 
   return {
     config: client.config,
     ready: snapshot.ready,
     permission: snapshot.permission,
     subscriber: snapshot.subscriber,
+    clientConfig: snapshot.clientConfig,
+    devIndicator: snapshot.devIndicator,
     error: snapshot.error,
     start,
     requestPermission,
     identify,
+    setDevIndicator,
   };
 }

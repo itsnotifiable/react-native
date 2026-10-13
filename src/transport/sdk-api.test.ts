@@ -183,10 +183,130 @@ describe("sdk api", () => {
     );
 
     await expect(api.getClientConfig()).resolves.toEqual({
+      environment: null,
+      app: null,
       android: null,
       ios: null,
       web: null,
     });
+  });
+
+  it("reads the app from client configuration", async () => {
+    const fetchImpl: FetchLike = () =>
+      Promise.resolve(
+        jsonResponse(
+          200,
+          envelope(
+            {
+              environment: "development",
+              app: {
+                name: "Shop",
+                description: "Order alerts",
+                icon: "https://cdn.example/mark.png",
+              },
+              ios: { bundle_id: "com.example.app" },
+            },
+            "CLIENT_CONFIG",
+          ),
+        ),
+      );
+    const api = createSdkApi(
+      createHttpClient({
+        baseUrl: "http://127.0.0.1:8000/api",
+        publicKey: "ntf_pub_test",
+        fetch: fetchImpl,
+      }),
+    );
+
+    await expect(api.getClientConfig()).resolves.toEqual({
+      environment: "development",
+      app: {
+        name: "Shop",
+        description: "Order alerts",
+        icon: "https://cdn.example/mark.png",
+      },
+      android: null,
+      ios: { bundle_id: "com.example.app" },
+      web: null,
+    });
+  });
+
+  it("lists unread notifications and records an open and a click", async () => {
+    const calls: Array<{ url: string; method: string | undefined }> = [];
+    const fetchImpl: FetchLike = (url, init) => {
+      calls.push({ url, method: init?.method });
+
+      if (init?.method === "GET") {
+        return Promise.resolve(
+          jsonResponse(
+            200,
+            envelope(
+              {
+                notifications: [
+                  {
+                    id: "note_1",
+                    title: "Your notification title",
+                    body: "Your message...",
+                    url: null,
+                    image_url: null,
+                    data: [],
+                    alert: true,
+                    status: "delivered",
+                    opened: false,
+                    opened_at: null,
+                    created_at: "2026-10-13T17:29:20.897Z",
+                    delivery_id: "delivery_1",
+                  },
+                  { id: 4 },
+                ],
+                page: 1,
+                per_page: 5,
+                total: 1,
+              },
+              "NOTIFICATIONS_LISTED",
+            ),
+          ),
+        );
+      }
+
+      return Promise.resolve(
+        jsonResponse(200, envelope({ id: "recorded" }, "NOTIFICATION_OPENED")),
+      );
+    };
+    const api = createSdkApi(
+      createHttpClient({
+        baseUrl: "http://127.0.0.1:8000/api",
+        publicKey: "ntf_pub_test",
+        fetch: fetchImpl,
+      }),
+    );
+
+    await expect(api.listNotifications("sub 1")).resolves.toEqual([
+      {
+        id: "note_1",
+        title: "Your notification title",
+        body: "Your message...",
+        url: null,
+        imageUrl: null,
+        alert: true,
+        opened: false,
+        createdAt: "2026-10-13T17:29:20.897Z",
+        deliveryId: "delivery_1",
+      },
+    ]);
+    await api.openNotification("sub 1", "note 1");
+    await api.clickDelivery("delivery 1");
+
+    expect(calls.map((call) => call.method)).toEqual(["GET", "POST", "POST"]);
+    expect(calls[0]?.url).toBe(
+      "http://127.0.0.1:8000/api/v1/sdk/subscribers/sub%201/notifications?page=1&per_page=5&opened=false",
+    );
+    expect(calls[1]?.url).toBe(
+      "http://127.0.0.1:8000/api/v1/sdk/subscribers/sub%201/notifications/note%201/open",
+    );
+    expect(calls[2]?.url).toBe(
+      "http://127.0.0.1:8000/api/v1/sdk/deliveries/delivery%201/click",
+    );
   });
 
   it("reports network failures", async () => {
