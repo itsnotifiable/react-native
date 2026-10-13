@@ -51,6 +51,9 @@ vi.mock("react-native", () => ({
       stop: () => undefined,
     }),
   },
+  Linking: {
+    openURL: () => Promise.resolve(),
+  },
   AppState: {
     currentState: "active",
     addEventListener: () => ({

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Animated,
   Image,
+  Linking,
   PanResponder,
   Pressable,
   StyleSheet,
@@ -17,6 +18,7 @@ const ringWidth = 6;
 const markSize = 66;
 const iconSize = markSize - ringWidth * 6;
 const markIcon = "https://notifiable.sh/favicon.png";
+const diagnosticsUrl = "https://notifiable.sh/sdk-diagnostics";
 const sideGap = 20;
 const topGap = 76;
 const bottomGap = 56;
@@ -165,22 +167,19 @@ function RecapSheet({
   readonly onExited: () => void;
   readonly onHide: () => void;
 }): React.JSX.Element {
-  const description = clientConfig.app?.description ?? null;
   const lines = platformLines(clientConfig);
   const shortcut = showMarkShortcut();
 
   return (
     <Sheet open={open} onClose={onClose} onExited={onExited}>
       <AppHeading clientConfig={clientConfig} />
-      {description !== null ? (
-        <Text style={styles.body}>{description}</Text>
-      ) : null}
       {lines.map((line) => (
         <View key={line.label} style={styles.row}>
           <Text style={styles.rowLabel}>{line.label}</Text>
           <Text style={styles.rowValue}>{line.value}</Text>
         </View>
       ))}
+      <ErrorTrackingSwitch />
       {shortcut !== null ? (
         <Text style={styles.note}>
           Press {shortcut} to show the mark again.
@@ -195,6 +194,48 @@ function RecapSheet({
         <Text style={styles.secondaryLabel}>Hide the mark</Text>
       </Pressable>
     </Sheet>
+  );
+}
+
+function ErrorTrackingSwitch(): React.JSX.Element {
+  const [enabled, setEnabled] = useState(true);
+
+  return (
+    <View style={styles.diagnosticsBox}>
+      <View style={styles.trackBox}>
+        <View style={styles.trackCopy}>
+          <Text style={styles.trackLabel}>Share SDK diagnostics</Text>
+          <Text style={styles.trackHint}>
+            Help improve Notifiable by sharing SDK crash reports during
+            development.
+          </Text>
+        </View>
+        <Pressable
+          accessibilityRole="switch"
+          accessibilityState={{ checked: enabled }}
+          hitSlop={8}
+          onPress={() => {
+            setEnabled((current) => !current);
+          }}
+          style={[styles.switchTrack, enabled ? styles.switchOn : null]}
+        >
+          <View style={[styles.switchKnob, enabled ? styles.knobOn : null]} />
+        </Pressable>
+      </View>
+      <View style={styles.diagnosticsRule} />
+      <Text style={styles.manage}>
+        Manage diagnostics of SDKs.{" "}
+        <Text
+          accessibilityRole="link"
+          style={styles.diagnosticsLink}
+          onPress={() => {
+            void Linking.openURL(diagnosticsUrl).catch(() => undefined);
+          }}
+        >
+          Learn what is collected →
+        </Text>
+      </Text>
+    </View>
   );
 }
 
@@ -656,6 +697,67 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: "center",
     marginTop: 14,
+  },
+  diagnosticsBox: {
+    marginTop: 16,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  trackBox: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  trackCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  trackLabel: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  trackHint: {
+    color: "rgba(255, 255, 255, 0.55)",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  diagnosticsRule: {
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.14)",
+  },
+  manage: {
+    color: "rgba(255, 255, 255, 0.72)",
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  diagnosticsLink: {
+    color: "#f5b942",
+    fontWeight: "600",
+  },
+  switchTrack: {
+    width: 32,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.18)",
+    padding: 2,
+    justifyContent: "center",
+    alignItems: "flex-start",
+  },
+  switchOn: {
+    backgroundColor: "#f5b942",
+  },
+  switchKnob: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#ffffff",
+  },
+  knobOn: {
+    alignSelf: "flex-end",
   },
   mark: {
     position: "absolute",
