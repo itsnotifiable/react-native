@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -129,6 +129,13 @@ function ConnectScreen({
 }) {
   const insets = useSafeAreaInsets();
   const canConnect = publicKey.trim().length > 0 && baseUrl.trim().length > 0;
+
+
+  useEffect(() => {
+    console.log('publicKey', publicKey);
+    console.log('baseUrl', baseUrl);
+    console.log('canConnect', canConnect);
+  }, [publicKey, baseUrl, canConnect]);
 
   return (
     <ScrollView

@@ -151,6 +151,7 @@ function pollInbox(
     }
 
     poll.inFlight = true;
+    console.info(`[Notifiable] Polling notifications for ${subscriberId}`);
 
     try {
       const notifications = await client.listNotifications(subscriberId);
@@ -164,6 +165,9 @@ function pollInbox(
 
       for (const notification of fresh) {
         remember(notification.id);
+        const title =
+          notification.title.length > 0 ? notification.title : notification.id;
+        console.info(`[Notifiable] New notification: ${title}`);
       }
 
       if (fresh.length > 0) {
@@ -254,7 +258,7 @@ function ToastCard({
     onShownRef.current();
     const animation = Animated.timing(progress, {
       toValue: 1,
-      duration: 280,
+      duration: 420,
       easing: easeOutCubic,
       useNativeDriver: true,
     });
@@ -275,47 +279,62 @@ function ToastCard({
       : "Notification";
 
   return (
-    <Animated.View
-      pointerEvents="box-none"
-      style={[
-        styles.toast,
-        {
-          opacity: progress,
-          transform: [
-            {
-              translateY: progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [24, 0],
-              }),
-            },
-          ],
-        },
-      ]}
-    >
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => {
-          onPress();
-          leaveRef.current();
-        }}
-        style={styles.card}
+    <>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.scrim, { opacity: progress }]}
+      />
+      <Animated.View
+        pointerEvents="box-none"
+        style={[
+          styles.toast,
+          {
+            opacity: progress.interpolate({
+              inputRange: [0, 0.2, 1],
+              outputRange: [0, 1, 1],
+            }),
+            transform: [
+              {
+                translateY: progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-58, 0],
+                }),
+              },
+              {
+                scale: progress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.5, 1],
+                }),
+              },
+            ],
+          },
+        ]}
       >
-        <Image source={{ uri: icon }} style={styles.icon} />
-        <View style={styles.copy}>
-          <View style={styles.titleRow}>
-            <Text numberOfLines={1} style={styles.title}>
-              {title}
-            </Text>
-            <Text style={styles.when}>now</Text>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => {
+            onPress();
+            leaveRef.current();
+          }}
+          style={styles.card}
+        >
+          <Image source={{ uri: icon }} style={styles.icon} />
+          <View style={styles.copy}>
+            <View style={styles.titleRow}>
+              <Text numberOfLines={1} style={styles.title}>
+                {title}
+              </Text>
+              <Text style={styles.when}>now</Text>
+            </View>
+            {item.notification.body.length > 0 ? (
+              <Text numberOfLines={2} style={styles.body}>
+                {item.notification.body}
+              </Text>
+            ) : null}
           </View>
-          {item.notification.body.length > 0 ? (
-            <Text numberOfLines={2} style={styles.body}>
-              {item.notification.body}
-            </Text>
-          ) : null}
-        </View>
-      </Pressable>
-    </Animated.View>
+        </Pressable>
+      </Animated.View>
+    </>
   );
 }
 
@@ -343,12 +362,21 @@ function easeInCubic(value: number): number {
 }
 
 const styles = StyleSheet.create({
+  scrim: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    zIndex: 30,
+    backgroundColor: "rgba(0, 0, 0, 0.28)",
+  },
   toast: {
     position: "absolute",
+    top: 58,
     left: 12,
     right: 12,
-    bottom: 28,
-    zIndex: 30,
+    zIndex: 31,
   },
   card: {
     flexDirection: "row",
