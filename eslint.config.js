@@ -42,7 +42,7 @@ const layerImportRestrictions = {
 
 export default tseslint.config(
   {
-    ignores: ["lib/**", "node_modules/**", "coverage/**"],
+    ignores: ["lib/**", "node_modules/**", "coverage/**", "example/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked.map((config) => ({

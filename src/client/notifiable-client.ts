@@ -81,12 +81,12 @@ export class NotifiableClientImpl implements NotifiableClient {
   readonly getSnapshot = (): NotifiableSnapshot => this.#snapshot;
 
   #enqueue<T>(task: () => Promise<T>): Promise<T> {
-    const result = this.#tail.then(task, task);
-    this.#tail = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
+    return new Promise<T>((resolve, reject) => {
+      this.#tail = this.#tail.then(
+        () => runQueued(task, resolve, reject),
+        () => runQueued(task, resolve, reject),
+      );
+    });
   }
 
   async #start(): Promise<void> {
@@ -315,6 +315,32 @@ export class NotifiableClientImpl implements NotifiableClient {
       listener();
     }
   }
+}
+
+function runQueued<T>(
+  task: () => Promise<T>,
+  resolve: (value: T) => void,
+  reject: (error: unknown) => void,
+): Promise<void> {
+  let pending: Promise<T>;
+
+  try {
+    pending = task();
+  } catch (error) {
+    reject(error);
+    return Promise.resolve();
+  }
+
+  // Attach the handler here. Returning the task promise from `.then` leaves
+  // Hermes reporting that rejection as uncaught, which opens the redbox.
+  return pending.then(
+    (value) => {
+      resolve(value);
+    },
+    (error: unknown) => {
+      reject(error);
+    },
+  );
 }
 
 function identityFrom(input: IdentifyInput): SubscriberIdentity {

@@ -171,6 +171,24 @@ describe("sdk api", () => {
     );
   });
 
+  it("accepts an empty client configuration list", async () => {
+    const fetchImpl: FetchLike = () =>
+      Promise.resolve(jsonResponse(200, envelope([], "CLIENT_CONFIG")));
+    const api = createSdkApi(
+      createHttpClient({
+        baseUrl: "http://127.0.0.1:8000/api",
+        publicKey: "ntf_pub_test",
+        fetch: fetchImpl,
+      }),
+    );
+
+    await expect(api.getClientConfig()).resolves.toEqual({
+      android: null,
+      ios: null,
+      web: null,
+    });
+  });
+
   it("reports network failures", async () => {
     const fetchImpl: FetchLike = () => Promise.reject(new Error("offline"));
     const api = createSdkApi(

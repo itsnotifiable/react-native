@@ -95,11 +95,18 @@ function omitUndefined(
 }
 
 function parseDeliveryConfig(data: unknown): DeliveryConfig {
+  // An app with no configured platform is a successful key check. PHP
+  // json-encodes that empty map as [], not {}.
+  if (Array.isArray(data)) {
+    if (data.length === 0) {
+      return { android: null, ios: null, web: null };
+    }
+
+    throw invalidClientConfig();
+  }
+
   if (!isRecord(data)) {
-    throw new NotifiableError({
-      code: "network",
-      message: "The client configuration response was invalid.",
-    });
+    throw invalidClientConfig();
   }
 
   return {
@@ -107,6 +114,13 @@ function parseDeliveryConfig(data: unknown): DeliveryConfig {
     ios: recordOrNull(data.ios),
     web: recordOrNull(data.web),
   };
+}
+
+function invalidClientConfig(): NotifiableError {
+  return new NotifiableError({
+    code: "network",
+    message: "The client configuration response was invalid.",
+  });
 }
 
 function parseSubscriber(data: unknown): Subscriber {
