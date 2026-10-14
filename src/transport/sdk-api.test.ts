@@ -82,6 +82,48 @@ describe("sdk api", () => {
     });
   });
 
+  it("sends device details and omits fields that were not read", async () => {
+    let body = "";
+    const fetchImpl: FetchLike = (_url, init) => {
+      body = init?.body ?? "";
+      return Promise.resolve(jsonResponse(201, envelope(subscriber)));
+    };
+    const api = createSdkApi(
+      createHttpClient({
+        baseUrl: "http://127.0.0.1:8000/api",
+        publicKey: "ntf_pub_test",
+        fetch: fetchImpl,
+      }),
+    );
+
+    await api.saveSubscriber({
+      deviceId: "device_1",
+      platform: "ios",
+      permission: "denied",
+      model: "iPhone17,1",
+      manufacturer: "Apple",
+      appVersion: "1.0",
+      ip: "192.168.1.20",
+      language: "en",
+      countryCode: "MA",
+      sdkVersion: "0.0.0",
+    });
+
+    expect(JSON.parse(body)).toEqual({
+      device_id: "device_1",
+      platform: "ios",
+      sdk: "react-native",
+      permission: "denied",
+      device_model: "iPhone17,1",
+      device_manufacturer: "Apple",
+      app_version: "1.0",
+      device_ip: "192.168.1.20",
+      language: "en",
+      country_code: "MA",
+      sdk_version: "0.0.0",
+    });
+  });
+
   it("patches identity and maps an invalid public key", async () => {
     const calls: Array<{ url: string; init: Parameters<FetchLike>[1] }> = [];
     const fetchImpl: FetchLike = (url, init) => {

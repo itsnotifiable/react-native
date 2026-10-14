@@ -16,13 +16,10 @@ import type {
   InboxQuery,
   SubscriberNotification,
 } from "../domain/inbox";
-import type { NotifiableEnvironment } from "../domain/environment";
 import type { DevicePort, PushPort } from "../platform/types";
 
 export interface NotifiableConfig {
   readonly publicKey: string;
-  readonly environment?: NotifiableEnvironment;
-  readonly baseUrl?: string;
   readonly logger?: Logger;
   readonly push?: PushPort;
   readonly storage?: KeyValueStore;
@@ -93,7 +90,6 @@ export interface NotifiableBinding {
 
 export type { Logger } from "../domain/logger";
 export type { KeyValueStore } from "../domain/storage";
-export type { NotifiableEnvironment } from "../domain/environment";
 export type { DeepLink } from "../domain/deep-link";
 export type { EventProperty, RecordedEvent } from "../domain/event";
 export type { DiagnosticsChoice } from "../domain/diagnostic";

@@ -24,6 +24,10 @@ const device: DevicePort = {
       osVersion: "18.0",
       locale: "en-US",
       timezone: "Africa/Casablanca",
+      model: "iPhone17,1",
+      manufacturer: "Apple",
+      appVersion: "1.0",
+      ip: "192.168.1.20",
     }),
 };
 
@@ -165,8 +169,6 @@ function createClient(
   return new NotifiableClientImpl(
     {
       publicKey: "ntf_pub_test",
-      environment: "local",
-      baseUrl: "http://127.0.0.1:8000/api",
       ...(push !== undefined ? { push } : {}),
       ...(deepLinks !== undefined ? { deepLinks } : {}),
       storage,
@@ -246,6 +248,13 @@ describe("subscriber registration", () => {
       osVersion: "18.0",
       locale: "en-US",
       timezone: "Africa/Casablanca",
+      model: "iPhone17,1",
+      manufacturer: "Apple",
+      appVersion: "1.0",
+      ip: "192.168.1.20",
+      language: "en",
+      countryCode: "US",
+      sdkVersion: "0.0.0",
     });
     expect(api.saves[0]?.token).toBeUndefined();
     expect(api.saves[0]?.provider).toBeUndefined();

@@ -61,8 +61,6 @@ describe("useNotifiable", () => {
     const client: NotifiableClient = {
       config: {
         publicKey: "ntf_pub_test",
-        environment: "local",
-        baseUrl: "http://127.0.0.1:8000/api",
       },
       start,
       requestPermission: vi.fn(() => Promise.resolve("denied" as const)),

@@ -212,6 +212,13 @@ function subscriberBody(
     os_version: write.osVersion,
     locale: write.locale,
     timezone: write.timezone,
+    device_model: write.model,
+    device_manufacturer: write.manufacturer,
+    device_ip: write.ip,
+    app_version: write.appVersion,
+    sdk_version: write.sdkVersion,
+    language: write.language,
+    country_code: write.countryCode,
   });
 }
 

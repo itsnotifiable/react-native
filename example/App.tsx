@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -96,12 +95,6 @@ const deepLinks: readonly DeepLink[] = pages.map(page => ({
   label: page.label,
 }));
 
-function defaultBaseUrl(): string {
-  return Platform.OS === 'android'
-    ? 'http://10.0.2.2:8000/api'
-    : 'http://127.0.0.1:8000/api';
-}
-
 function pageFor(url: string): ExamplePage | null {
   let pathname = url.split('?')[0] ?? url;
 
@@ -121,12 +114,8 @@ function pageFor(url: string): ExamplePage | null {
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
   const [publicKey, setPublicKey] = useState('');
-  const [baseUrl, setBaseUrl] = useState(defaultBaseUrl);
   const [page, setPage] = useState<ExamplePage>('subscriber');
-  const [connected, setConnected] = useState<{
-    publicKey: string;
-    baseUrl: string;
-  } | null>(null);
+  const [connected, setConnected] = useState<string | null>(null);
   const openDeepLink = useCallback((url: string) => {
     const next = pageFor(url);
 
@@ -141,25 +130,20 @@ function App() {
       {connected === null ? (
         <ConnectScreen
           publicKey={publicKey}
-          baseUrl={baseUrl}
           onChangePublicKey={setPublicKey}
-          onChangeBaseUrl={setBaseUrl}
           onConnect={() => {
             const key = publicKey.trim();
-            const url = baseUrl.trim();
 
-            if (key.length === 0 || url.length === 0) {
+            if (key.length === 0) {
               return;
             }
 
-            setConnected({ publicKey: key, baseUrl: url });
+            setConnected(key);
           }}
         />
       ) : (
         <NotifiableProvider
-          publicKey={connected.publicKey}
-          environment="local"
-          baseUrl={connected.baseUrl}
+          publicKey={connected}
           push={push}
           deepLinks={deepLinks}
           onDeepLink={openDeepLink}
@@ -180,25 +164,15 @@ function App() {
 
 function ConnectScreen({
   publicKey,
-  baseUrl,
   onChangePublicKey,
-  onChangeBaseUrl,
   onConnect,
 }: {
   publicKey: string;
-  baseUrl: string;
   onChangePublicKey: (value: string) => void;
-  onChangeBaseUrl: (value: string) => void;
   onConnect: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const canConnect = publicKey.trim().length > 0 && baseUrl.trim().length > 0;
-
-  useEffect(() => {
-    console.log('publicKey', publicKey);
-    console.log('baseUrl', baseUrl);
-    console.log('canConnect', canConnect);
-  }, [publicKey, baseUrl, canConnect]);
+  const canConnect = publicKey.trim().length > 0;
 
   return (
     <ScrollView
@@ -210,22 +184,14 @@ function ConnectScreen({
     >
       <Text style={styles.title}>Notifiable</Text>
       <Text style={styles.subtitle}>
-        This app uses the local @notifiable/react-native package. On the iOS
-        simulator, 127.0.0.1 reaches your machine. On the Android emulator, use
-        10.0.2.2.
+        Enter the public key from the Notifiable dashboard. This app connects to
+        Notifiable.
       </Text>
       <Field
         label="Public key"
         value={publicKey}
         onChangeText={onChangePublicKey}
         placeholder="ntf_pub_..."
-        autoCapitalize="none"
-      />
-      <Field
-        label="API base URL"
-        value={baseUrl}
-        onChangeText={onChangeBaseUrl}
-        placeholder="http://127.0.0.1:8000/api"
         autoCapitalize="none"
       />
       <Action label="Connect" onPress={onConnect} disabled={!canConnect} />
@@ -422,7 +388,6 @@ function Home({
       keyboardShouldPersistTaps="handled"
     >
       <Text style={styles.title}>Subscriber</Text>
-      <Status label="Base URL" value={notifiable.config.baseUrl ?? ''} />
       <Status label="Ready" value={notifiable.ready ? 'yes' : 'no'} />
       <Status label="Permission" value={notifiable.permission} />
       <Status label="Subscriber" value={subscriber?.id ?? 'waiting'} />

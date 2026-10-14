@@ -24,6 +24,7 @@ import type {
   SubscriberNotification,
 } from "../domain/inbox";
 import type { Logger } from "../domain/logger";
+import { localeParts } from "../domain/locale";
 import type { KeyValueStore } from "../domain/storage";
 import type {
   DeliveryConfig,
@@ -82,7 +83,6 @@ export class NotifiableClientImpl implements NotifiableClient {
     this.#storage = storage;
     this.#logger = resolveLogger(config.logger);
     this.#logger.debug("Notifiable client created", {
-      environment: config.environment,
       hasPush: config.push !== undefined,
     });
   }
@@ -296,10 +296,12 @@ export class NotifiableClientImpl implements NotifiableClient {
       session.subscriberId === null
         ? (session.anonymousId ?? undefined)
         : undefined;
+    const place = localeParts(profile.locale);
     const write: SubscriberWrite = {
       deviceId: session.deviceId,
       platform: profile.platform,
       permission,
+      sdkVersion,
       ...(token !== null
         ? { token: token.token, provider: token.provider }
         : {}),
@@ -308,6 +310,16 @@ export class NotifiableClientImpl implements NotifiableClient {
       ...(profile.osVersion !== null ? { osVersion: profile.osVersion } : {}),
       ...(profile.locale !== null ? { locale: profile.locale } : {}),
       ...(profile.timezone !== null ? { timezone: profile.timezone } : {}),
+      ...(profile.model !== null ? { model: profile.model } : {}),
+      ...(profile.manufacturer !== null
+        ? { manufacturer: profile.manufacturer }
+        : {}),
+      ...(profile.appVersion !== null
+        ? { appVersion: profile.appVersion }
+        : {}),
+      ...(profile.ip !== null ? { ip: profile.ip } : {}),
+      ...(place.language !== null ? { language: place.language } : {}),
+      ...(place.countryCode !== null ? { countryCode: place.countryCode } : {}),
     };
     const subscriber = await this.#api.saveSubscriber(write);
     const storage = await this.#resolveStorage();

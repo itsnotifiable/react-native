@@ -1,4 +1,5 @@
 import { NotifiableError } from "../domain/errors";
+import { deviceAddress } from "../domain/locale";
 import { isRecord } from "../domain/record";
 import type { DeviceProfile, MobilePlatform } from "../domain/subscriber";
 import type { DevicePort } from "./types";
@@ -8,16 +9,32 @@ interface ReactNativePlatform {
   readonly Version?: string | number;
 }
 
+interface NativeDevice {
+  readonly model: string | null;
+  readonly manufacturer: string | null;
+  readonly appVersion: string | null;
+  readonly ip: string | null;
+}
+
+const emptyDevice: NativeDevice = {
+  model: null,
+  manufacturer: null,
+  appVersion: null,
+  ip: null,
+};
+
 export function createDevicePort(): DevicePort {
   return {
-    getProfile(): Promise<DeviceProfile> {
-      const platform = loadPlatform();
+    async getProfile(): Promise<DeviceProfile> {
+      const loaded = loadReactNative();
+      const platform = readPlatform(loaded.Platform);
+      const native = await readNativeDevice(loaded.NativeModules);
       const options = Intl.DateTimeFormat().resolvedOptions();
       const version = platform.Version;
       const locale = options.locale;
       const timezone = options.timeZone;
 
-      return Promise.resolve({
+      return {
         platform: mobilePlatform(platform.OS),
         osVersion:
           typeof version === "string" || typeof version === "number"
@@ -25,7 +42,11 @@ export function createDevicePort(): DevicePort {
             : null,
         locale: locale.length > 0 ? locale : null,
         timezone: timezone.length > 0 ? timezone : null,
-      });
+        model: native.model,
+        manufacturer: native.manufacturer,
+        appVersion: native.appVersion,
+        ip: native.ip,
+      };
     },
   };
 }
@@ -43,18 +64,18 @@ function mobilePlatform(os: string): MobilePlatform {
 
 declare function require(moduleName: "react-native"): unknown;
 
-function loadPlatform(): ReactNativePlatform {
+function loadReactNative(): Record<string, unknown> {
   // A dynamic import() is an async Metro require, and that module id is not in
-  // this bundle. require() only reads Platform, so PushNotificationIOS stays unloaded.
+  // this bundle. require() only reads Platform and the device module, so
+  // PushNotificationIOS stays unloaded.
   try {
     const loaded: unknown = require("react-native");
-    const platform = readPlatform(isRecord(loaded) ? loaded.Platform : loaded);
 
-    if (platform === null) {
-      throw new Error("react-native Platform could not be loaded.");
+    if (!isRecord(loaded)) {
+      throw new Error("react-native could not be loaded.");
     }
 
-    return platform;
+    return loaded;
   } catch (error) {
     throw new NotifiableError({
       code: "invalid_config",
@@ -66,12 +87,15 @@ function loadPlatform(): ReactNativePlatform {
   }
 }
 
-function readPlatform(loaded: unknown): ReactNativePlatform | null {
+function readPlatform(loaded: unknown): ReactNativePlatform {
   const candidate =
     isRecord(loaded) && isRecord(loaded.default) ? loaded.default : loaded;
 
   if (!isRecord(candidate) || typeof candidate.OS !== "string") {
-    return null;
+    throw new NotifiableError({
+      code: "invalid_config",
+      message: "react-native Platform could not be loaded.",
+    });
   }
 
   const version = candidate.Version;
@@ -82,4 +106,57 @@ function readPlatform(loaded: unknown): ReactNativePlatform | null {
       ? { Version: version }
       : {}),
   };
+}
+
+async function readNativeDevice(loaded: unknown): Promise<NativeDevice> {
+  if (!isRecord(loaded)) {
+    return emptyDevice;
+  }
+
+  const device = loaded.NotifiableDevice;
+
+  if (!isRecord(device)) {
+    return emptyDevice;
+  }
+
+  const getInfo = device.getInfo;
+
+  if (!isInfoReader(getInfo)) {
+    return emptyDevice;
+  }
+
+  try {
+    const info: unknown = await getInfo();
+
+    if (!isRecord(info)) {
+      return emptyDevice;
+    }
+
+    return {
+      model: clip(info.model, 80),
+      manufacturer: clip(info.manufacturer, 80),
+      appVersion: clip(info.appVersion, 40),
+      ip: deviceAddress(typeof info.ip === "string" ? info.ip : null),
+    };
+  } catch {
+    return emptyDevice;
+  }
+}
+
+function isInfoReader(value: unknown): value is () => Promise<unknown> {
+  return typeof value === "function";
+}
+
+function clip(value: unknown, max: number): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  return trimmed.length > max ? trimmed.slice(0, max) : trimmed;
 }

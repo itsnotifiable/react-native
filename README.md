@@ -16,7 +16,6 @@ function App() {
   return (
     <NotifiableProvider
       publicKey="ntf_pub_..."
-      environment="local"
       push={{
         provider: "fcm",
         getPermissionStatus,
@@ -45,7 +44,7 @@ function Home() {
 }
 ```
 
-`environment: "local"` calls `http://127.0.0.1:8000/api`. The default, `"production"`, calls `https://notifiable.sh/api`. `baseUrl` overrides either host.
+The SDK calls `https://notifiable.sh/api`. The app does not choose that host.
 
 The provider registers the install on startup. Permission can be denied or still undetermined. `requestPermission()` asks the push port, then updates the subscriber. `identify()` turns an anonymous subscriber into a known user.
 

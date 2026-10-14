@@ -12,8 +12,6 @@ export interface NotifiableProviderProps extends Partial<
   Pick<
     NotifiableConfig,
     | "publicKey"
-    | "environment"
-    | "baseUrl"
     | "logger"
     | "push"
     | "storage"
@@ -30,8 +28,6 @@ export function NotifiableProvider({
   children,
   client,
   publicKey,
-  environment,
-  baseUrl,
   logger,
   push,
   storage,
@@ -55,8 +51,6 @@ export function NotifiableProvider({
 
     return createNotifiable({
       publicKey: key,
-      ...(environment !== undefined ? { environment } : {}),
-      ...(baseUrl !== undefined ? { baseUrl } : {}),
       ...(logger !== undefined ? { logger } : {}),
       ...(push !== undefined ? { push } : {}),
       ...(storage !== undefined ? { storage } : {}),
@@ -64,18 +58,7 @@ export function NotifiableProvider({
       ...(deepLinks !== undefined ? { deepLinks } : {}),
       ...(onDeepLink !== undefined ? { onDeepLink } : {}),
     });
-  }, [
-    client,
-    publicKey,
-    environment,
-    baseUrl,
-    logger,
-    push,
-    storage,
-    device,
-    deepLinks,
-    onDeepLink,
-  ]);
+  }, [client, publicKey, logger, push, storage, device, deepLinks, onDeepLink]);
 
   useEffect(() => {
     void resolved.start().catch(() => undefined);

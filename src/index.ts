@@ -16,7 +16,6 @@ export type {
   NotifiableBinding,
   NotifiableClient,
   NotifiableConfig,
-  NotifiableEnvironment,
   NotifiableSnapshot,
   PermissionStatus,
   PushPort,

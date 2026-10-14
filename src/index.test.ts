@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   NotifiableError,
   NotifiableProvider,
@@ -48,31 +48,35 @@ describe("error codes", () => {
 });
 
 describe("createNotifiable", () => {
-  it("uses the local and production hosts", () => {
-    const local = createNotifiable({
-      publicKey: " ntf_pub_local ",
-      environment: "local",
-    });
-    const production = createNotifiable({
-      publicKey: "ntf_pub_prod",
-    });
-    const custom = createNotifiable({
-      publicKey: "ntf_pub_custom",
-      baseUrl: "https://example.test/api/",
+  it("connects to the Notifiable API", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", (url: string) => {
+      urls.push(url);
+      return Promise.resolve({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ status: "error", message: "no" }),
+      });
     });
 
-    expect(local.config).toMatchObject({
-      publicKey: "ntf_pub_local",
-      environment: "local",
-      baseUrl: "http://127.0.0.1:8000/api",
-    });
-    expect(production.config).toMatchObject({
-      environment: "production",
-      baseUrl: "https://notifiable.sh/api",
-    });
-    expect(custom.config.baseUrl).toBe("https://example.test/api");
-    expect(custom.config.environment).toBeUndefined();
-    expect(local.config.logger).toBeUndefined();
+    try {
+      const client = createNotifiable({
+        publicKey: " ntf_pub_prod ",
+        storage: {
+          getItem: () => Promise.resolve(null),
+          setItem: () => Promise.resolve(),
+          removeItem: () => Promise.resolve(),
+        },
+      });
+
+      await expect(client.start()).rejects.toMatchObject({
+        code: "network",
+      });
+      expect(client.config.publicKey).toBe("ntf_pub_prod");
+      expect(urls[0]).toBe("https://notifiable.sh/api/v1/sdk/client-config");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("rejects a blank public key", () => {

@@ -3,13 +3,16 @@ import {
   Animated,
   Image,
   Linking,
+  NativeModules,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import { packageCheck, type PackageCheck } from "../domain/package-check";
 import type { DeliveryConfig } from "../domain/subscriber";
 import { showMarkShortcut, useShowMarkShortcut } from "./key-command";
 import { useNotifiable } from "./use-notifiable";
@@ -167,18 +170,12 @@ function RecapSheet({
   readonly onExited: () => void;
   readonly onHide: () => void;
 }): React.JSX.Element {
-  const lines = platformLines(clientConfig);
   const shortcut = showMarkShortcut();
 
   return (
     <Sheet open={open} onClose={onClose} onExited={onExited}>
       <AppHeading clientConfig={clientConfig} />
-      {lines.map((line) => (
-        <View key={line.label} style={styles.row}>
-          <Text style={styles.rowLabel}>{line.label}</Text>
-          <Text style={styles.rowValue}>{line.value}</Text>
-        </View>
-      ))}
+      <PackageIdentity clientConfig={clientConfig} />
       <ErrorTrackingSwitch />
       {shortcut !== null ? (
         <Text style={styles.note}>
@@ -238,6 +235,222 @@ function ErrorTrackingSwitch(): React.JSX.Element {
       </Text>
     </View>
   );
+}
+
+function PackageIdentity({
+  clientConfig,
+}: {
+  readonly clientConfig: DeliveryConfig;
+}): React.JSX.Element | null {
+  const applicationId = useApplicationId();
+  const current =
+    Platform.OS === "ios" || Platform.OS === "android" ? Platform.OS : null;
+  const iosId = textField(clientConfig.ios, "bundle_id");
+  const androidId = textField(clientConfig.android, "package_name");
+  const iosCheck =
+    current === "ios" ? packageCheck(iosId, applicationId) : null;
+  const androidCheck =
+    current === "android" ? packageCheck(androidId, applicationId) : null;
+
+  if (iosId === null && androidId === null && applicationId === null) {
+    return null;
+  }
+
+  return (
+    <View style={styles.packages}>
+      <PackageRow
+        label="iOS"
+        kind="iOS bundle ID"
+        configured={iosId}
+        applicationId={current === "ios" ? applicationId : null}
+        check={iosCheck}
+      />
+      <PackageRow
+        label="Android"
+        kind="Android package"
+        configured={androidId}
+        applicationId={current === "android" ? applicationId : null}
+        check={androidCheck}
+      />
+    </View>
+  );
+}
+
+function PackageRow({
+  label,
+  kind,
+  configured,
+  applicationId,
+  check,
+}: {
+  readonly label: string;
+  readonly kind: string;
+  readonly configured: string | null;
+  readonly applicationId: string | null;
+  readonly check: PackageCheck | null;
+}): React.JSX.Element | null {
+  if (configured === null && applicationId === null) {
+    return null;
+  }
+
+  return (
+    <View style={styles.packageRow}>
+      <View style={styles.packageHeading}>
+        <Text style={styles.rowLabel}>{label}</Text>
+        {check === "match" ? (
+          <View style={styles.checkBadge}>
+            <Text style={styles.badgeGlyph}>✓</Text>
+          </View>
+        ) : null}
+        {check === "mismatch" ? (
+          <View style={styles.errorBadge}>
+            <Text style={styles.badgeGlyph}>!</Text>
+          </View>
+        ) : null}
+      </View>
+      <IdentifierLine label="Dashboard" value={configured} />
+      {applicationId !== null ? (
+        <IdentifierLine label="This app" value={applicationId} />
+      ) : null}
+      {check === "mismatch" && applicationId !== null ? (
+        <View style={styles.packageError}>
+          <View style={styles.errorBadge}>
+            <Text style={styles.badgeGlyph}>!</Text>
+          </View>
+          <Text style={styles.packageErrorText}>
+            {configured === null
+              ? `Set the dashboard ${kind} to ${applicationId}.`
+              : `Change the dashboard ${kind} to ${applicationId}.`}
+          </Text>
+          <CopyButton value={applicationId} />
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function IdentifierLine({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string | null;
+}): React.JSX.Element {
+  return (
+    <View style={styles.identifier}>
+      <View style={styles.identifierCopy}>
+        <Text style={styles.identifierLabel}>{label}</Text>
+        <Text style={styles.identifierValue}>{value ?? "Not set"}</Text>
+      </View>
+      {value !== null ? <CopyButton value={value} /> : null}
+    </View>
+  );
+}
+
+function CopyButton({ value }: { readonly value: string }): React.JSX.Element {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Copy ${value}`}
+      hitSlop={8}
+      onPress={() => {
+        copyText(value);
+      }}
+      style={styles.copyButton}
+    >
+      <View style={styles.copyBack} />
+      <View style={styles.copyFront} />
+    </Pressable>
+  );
+}
+
+function useApplicationId(): string | null {
+  const [applicationId, setApplicationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const read = readDeviceInfo();
+    const state = { active: true };
+
+    if (read === null) {
+      return;
+    }
+
+    void read()
+      .then((info) => {
+        if (state.active) {
+          setApplicationId(applicationIdFrom(info));
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      state.active = false;
+    };
+  }, []);
+
+  return applicationId;
+}
+
+function readDeviceInfo(): (() => Promise<unknown>) | null {
+  const modules: unknown = NativeModules;
+
+  if (typeof modules !== "object" || modules === null) {
+    return null;
+  }
+
+  const native: unknown = Reflect.get(modules, "NotifiableDevice");
+
+  if (typeof native !== "object" || native === null) {
+    return null;
+  }
+
+  const getInfo: unknown = Reflect.get(native, "getInfo");
+
+  if (!isInfoReader(getInfo)) {
+    return null;
+  }
+
+  return () => getInfo();
+}
+
+function copyText(value: string): void {
+  const modules: unknown = NativeModules;
+
+  if (typeof modules !== "object" || modules === null) {
+    return;
+  }
+
+  const native: unknown = Reflect.get(modules, "NotifiableDevice");
+
+  if (typeof native !== "object" || native === null) {
+    return;
+  }
+
+  const copy: unknown = Reflect.get(native, "copy");
+
+  if (!isCopy(copy)) {
+    return;
+  }
+
+  copy(value);
+}
+
+function applicationIdFrom(info: unknown): string | null {
+  if (typeof info !== "object" || info === null) {
+    return null;
+  }
+
+  const id: unknown = Reflect.get(info, "applicationId");
+
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
+function isInfoReader(value: unknown): value is () => Promise<unknown> {
+  return typeof value === "function";
+}
+
+function isCopy(value: unknown): value is (text: string) => void {
+  return typeof value === "function";
 }
 
 function AppHeading({
@@ -446,24 +659,6 @@ function DraggableMark({
   );
 }
 
-function platformLines(
-  config: DeliveryConfig,
-): ReadonlyArray<{ readonly label: string; readonly value: string }> {
-  const lines: Array<{ label: string; value: string }> = [];
-  const bundleId = textField(config.ios, "bundle_id");
-  const packageName = textField(config.android, "package_name");
-
-  if (bundleId !== null) {
-    lines.push({ label: "iOS", value: bundleId });
-  }
-
-  if (packageName !== null) {
-    lines.push({ label: "Android", value: packageName });
-  }
-
-  return lines;
-}
-
 function textField(
   record: Readonly<Record<string, unknown>> | null,
   key: string,
@@ -670,6 +865,100 @@ const styles = StyleSheet.create({
   rowValue: {
     color: "#ffffff",
     fontSize: 14,
+  },
+  packages: {
+    marginTop: 8,
+    gap: 12,
+  },
+  packageRow: {
+    gap: 6,
+  },
+  packageHeading: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  identifier: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  identifierCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  identifierLabel: {
+    color: "rgba(255, 255, 255, 0.45)",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  identifierValue: {
+    color: "#ffffff",
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  checkBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#3ddc97",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorBadge: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: "#ff5c5c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeGlyph: {
+    color: "#111111",
+    fontSize: 11,
+    fontWeight: "700",
+    lineHeight: 13,
+  },
+  packageError: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 14,
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  packageErrorText: {
+    flex: 1,
+    color: "rgba(255, 255, 255, 0.72)",
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  copyButton: {
+    width: 16,
+    height: 16,
+  },
+  copyBack: {
+    position: "absolute",
+    top: 0,
+    left: 4,
+    width: 11,
+    height: 11,
+    borderRadius: 2,
+    borderWidth: 1.5,
+    borderColor: "rgba(255, 255, 255, 0.72)",
+  },
+  copyFront: {
+    position: "absolute",
+    top: 4,
+    left: 0,
+    width: 11,
+    height: 11,
+    borderRadius: 2,
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+    backgroundColor: "#111111",
   },
   primary: {
     marginTop: 12,

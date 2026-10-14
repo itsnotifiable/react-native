@@ -31,6 +31,10 @@ export interface DeviceProfile {
   readonly osVersion: string | null;
   readonly locale: string | null;
   readonly timezone: string | null;
+  readonly model: string | null;
+  readonly manufacturer: string | null;
+  readonly appVersion: string | null;
+  readonly ip: string | null;
 }
 
 export interface SubscriberWrite {
@@ -44,6 +48,13 @@ export interface SubscriberWrite {
   readonly osVersion?: string;
   readonly locale?: string;
   readonly timezone?: string;
+  readonly model?: string;
+  readonly manufacturer?: string;
+  readonly appVersion?: string;
+  readonly ip?: string;
+  readonly language?: string;
+  readonly countryCode?: string;
+  readonly sdkVersion?: string;
 }
 
 export interface SubscriberIdentity {

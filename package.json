@@ -22,6 +22,7 @@
     "src",
     "lib",
     "ios",
+    "android",
     "notifiable-react-native.podspec"
   ],
   "exports": {
