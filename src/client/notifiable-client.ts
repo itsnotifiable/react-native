@@ -176,7 +176,20 @@ export class NotifiableClientImpl implements NotifiableClient {
       this.#commit({ clientConfig, devIndicator });
       await this.#syncDevice({ prompted: false });
       await this.#saveDeepLinks();
+      await this.#promptIfRequested();
     });
+  }
+
+  async #promptIfRequested(): Promise<void> {
+    if (
+      this.#snapshot.subscriber?.promptPermission !== true ||
+      this.config.push === undefined
+    ) {
+      return;
+    }
+
+    this.#logger.info("Permission prompt requested");
+    await this.#requestPermission();
   }
 
   async #requestPermission(): Promise<PermissionStatus> {

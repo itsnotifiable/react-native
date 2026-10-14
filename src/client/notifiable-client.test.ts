@@ -280,6 +280,39 @@ describe("subscriber registration", () => {
     expect(second.getSnapshot().subscriber?.id).toBe("sub_1");
   });
 
+  it("asks for permission again when the subscriber requests a prompt", async () => {
+    const api = createApi();
+    const saves: SubscriberWrite[] = [];
+    const prompting: SdkApi = {
+      ...api,
+      saveSubscriber: (write: SubscriberWrite) => {
+        saves.push(write);
+        return Promise.resolve({
+          ...subscriberFrom(write),
+          promptPermission: write.prompted !== true,
+        });
+      },
+    };
+    const requestPermission = vi.fn(() => Promise.resolve("denied" as const));
+    const push: PushPort = {
+      provider: "apns",
+      getPermissionStatus: () => Promise.resolve("denied"),
+      requestPermission,
+      getToken: () => Promise.resolve(null),
+    };
+    const client = createClient(createMemoryStorage(), push, prompting);
+
+    await client.start();
+
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(saves).toHaveLength(2);
+    expect(saves[1]).toMatchObject({
+      permission: "denied",
+      prompted: true,
+    });
+    expect(client.getSnapshot().subscriber?.promptPermission).toBe(false);
+  });
+
   it("updates permission after a denial without dropping the subscriber", async () => {
     const api = createApi();
     const push: PushPort = {
