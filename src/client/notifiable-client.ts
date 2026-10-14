@@ -2,10 +2,21 @@ import { asNotifiableError, NotifiableError } from "../domain/errors";
 import { resolveLogger } from "../internal/logger";
 import { createId } from "../internal/id";
 import { loadDevIndicator, saveDevIndicator } from "../internal/dev-indicator";
+import { loadDiagnostics, saveDiagnostics } from "../internal/diagnostics";
+import { createUlid } from "../internal/ulid";
 import { loadSession, saveSession } from "../internal/session";
 import { loadDefaultStorage } from "../internal/storage";
 import type { DeepLink } from "../domain/deep-link";
 import type { DevIndicatorChoice } from "../domain/dev-indicator";
+import {
+  crashFingerprint,
+  describeCrash,
+  diagnosticSubscriberId,
+  sdkVersion,
+  type DiagnosticCrash,
+  type DiagnosticsChoice,
+  type StackFrame,
+} from "../domain/diagnostic";
 import type { EventProperty, RecordedEvent } from "../domain/event";
 import type {
   InboxPage,
@@ -18,6 +29,7 @@ import type {
   DeliveryConfig,
   IdentifyInput,
   PermissionStatus,
+  MobilePlatform,
   PushProvider,
   StoredSession,
   Subscriber,
@@ -38,6 +50,7 @@ const initialSnapshot: NotifiableSnapshot = {
   subscriber: null,
   clientConfig: null,
   devIndicator: null,
+  diagnostics: null,
   deepLinks: null,
   error: null,
 };
@@ -50,6 +63,10 @@ export class NotifiableClientImpl implements NotifiableClient {
   readonly #listeners = new Set<() => void>();
   #storage: KeyValueStore | undefined;
   #session: StoredSession | null = null;
+  #diagnostics: DiagnosticsChoice | null = null;
+  #diagnosticQueue: PendingDiagnostic[] = [];
+  #diagnosticSeen = new Set<string>();
+  #diagnosticFlushing = false;
   #snapshot: NotifiableSnapshot = initialSnapshot;
   #tail: Promise<void> = Promise.resolve();
 
@@ -87,48 +104,62 @@ export class NotifiableClientImpl implements NotifiableClient {
   readonly setDevIndicator = (enabled: boolean): Promise<void> =>
     this.#setDevIndicator(enabled);
 
+  readonly setDiagnostics = (enabled: boolean): Promise<void> =>
+    this.#setDiagnostics(enabled);
+
   readonly listNotifications = (
     subscriberId: string,
     query?: InboxQuery,
   ): Promise<InboxPage> =>
-    query === undefined
-      ? this.#api.listNotifications(subscriberId)
-      : this.#api.listNotifications(subscriberId, query);
+    this.#capture(() =>
+      query === undefined
+        ? this.#api.listNotifications(subscriberId)
+        : this.#api.listNotifications(subscriberId, query),
+    );
 
-  readonly inbox = (query?: InboxQuery): Promise<InboxPage> => {
-    const subscriberId = this.#requireSubscriberId();
+  readonly inbox = (query?: InboxQuery): Promise<InboxPage> =>
+    this.#capture(() => {
+      const subscriberId = this.#requireSubscriberId();
 
-    return query === undefined
-      ? this.#api.listNotifications(subscriberId)
-      : this.#api.listNotifications(subscriberId, query);
-  };
+      return query === undefined
+        ? this.#api.listNotifications(subscriberId)
+        : this.#api.listNotifications(subscriberId, query);
+    });
 
   readonly notification = (
     notificationId: string,
   ): Promise<SubscriberNotification> =>
-    this.#api.getNotification(this.#requireSubscriberId(), notificationId);
+    this.#capture(() =>
+      this.#api.getNotification(this.#requireSubscriberId(), notificationId),
+    );
 
   readonly openNotification = (
     subscriberId: string,
     notificationId: string,
-  ): Promise<void> => this.#api.openNotification(subscriberId, notificationId);
+  ): Promise<void> =>
+    this.#capture(() =>
+      this.#api.openNotification(subscriberId, notificationId),
+    );
 
   readonly openStoredNotification = (notificationId: string): Promise<void> =>
-    this.#api.openNotification(this.#requireSubscriberId(), notificationId);
+    this.#capture(() =>
+      this.#api.openNotification(this.#requireSubscriberId(), notificationId),
+    );
 
   readonly clickDelivery = (deliveryId: string): Promise<void> =>
-    this.#api.clickDelivery(deliveryId);
+    this.#capture(() => this.#api.clickDelivery(deliveryId));
 
   readonly track = (
     name: string,
     properties?: Readonly<Record<string, EventProperty>>,
-  ): Promise<RecordedEvent> => {
-    const subscriberId = this.#requireSubscriberId();
+  ): Promise<RecordedEvent> =>
+    this.#capture(() => {
+      const subscriberId = this.#requireSubscriberId();
 
-    return properties === undefined
-      ? this.#api.trackEvent(subscriberId, name)
-      : this.#api.trackEvent(subscriberId, name, properties);
-  };
+      return properties === undefined
+        ? this.#api.trackEvent(subscriberId, name)
+        : this.#api.trackEvent(subscriberId, name, properties);
+    });
 
   readonly subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
@@ -172,8 +203,10 @@ export class NotifiableClientImpl implements NotifiableClient {
         storage,
         this.config.publicKey,
       );
+      const diagnostics = await loadDiagnostics(storage, this.config.publicKey);
+      this.#diagnostics = diagnostics;
       const clientConfig = await this.#api.getClientConfig();
-      this.#commit({ clientConfig, devIndicator });
+      this.#commit({ clientConfig, devIndicator, diagnostics });
       await this.#syncDevice({ prompted: false });
       await this.#saveDeepLinks();
       await this.#promptIfRequested();
@@ -351,6 +384,18 @@ export class NotifiableClientImpl implements NotifiableClient {
     this.#logger.info("Deep links saved", { count: saved.length });
   }
 
+  async #setDiagnostics(enabled: boolean): Promise<void> {
+    const storage = await this.#resolveStorage();
+    const diagnostics: DiagnosticsChoice = enabled ? "enabled" : "disabled";
+    await saveDiagnostics(storage, this.config.publicKey, diagnostics);
+    this.#diagnostics = diagnostics;
+    this.#commit({ diagnostics });
+
+    if (!enabled) {
+      this.#diagnosticQueue = [];
+    }
+  }
+
   async #setDevIndicator(enabled: boolean): Promise<void> {
     const storage = await this.#resolveStorage();
     const devIndicator: DevIndicatorChoice = enabled ? "enabled" : "disabled";
@@ -396,9 +441,110 @@ export class NotifiableClientImpl implements NotifiableClient {
     try {
       return await task();
     } catch (error) {
+      this.#report(error);
       const wrapped = asNotifiableError(error);
       this.#commit({ error: wrapped });
       throw wrapped;
+    }
+  }
+
+  #capture<T>(task: () => Promise<T>): Promise<T> {
+    let pending: Promise<T>;
+
+    try {
+      pending = task();
+    } catch (error) {
+      this.#report(error);
+      throw error;
+    }
+
+    return pending.then(
+      (value) => value,
+      (error: unknown) => {
+        this.#report(error);
+        throw error;
+      },
+    );
+  }
+
+  #diagnosticsOpen(): boolean {
+    return (
+      this.#snapshot.clientConfig?.environment === "development" &&
+      this.#diagnostics !== "disabled"
+    );
+  }
+
+  #report(error: unknown): void {
+    if (!this.#diagnosticsOpen()) {
+      return;
+    }
+
+    const described = describeCrash(error);
+    const fingerprint = crashFingerprint(
+      described.type,
+      described.message,
+      described.frames,
+    );
+
+    if (this.#diagnosticSeen.has(fingerprint)) {
+      return;
+    }
+
+    this.#diagnosticSeen.add(fingerprint);
+    const subscriberId = diagnosticSubscriberId(
+      this.#session?.subscriberId ?? null,
+    );
+    this.#diagnosticQueue.push({
+      id: createUlid(),
+      occurredAt: new Date().toISOString(),
+      type: described.type,
+      message: described.message,
+      frames: described.frames,
+      ...(subscriberId !== undefined ? { subscriberId } : {}),
+    });
+
+    if (this.#diagnosticQueue.length > 20) {
+      this.#diagnosticQueue.shift();
+    }
+
+    void Promise.resolve().then(() => {
+      void this.#flushDiagnostics();
+    });
+  }
+
+  async #flushDiagnostics(): Promise<void> {
+    if (this.#diagnosticFlushing || this.#diagnosticQueue.length === 0) {
+      return;
+    }
+
+    if (!this.#diagnosticsOpen()) {
+      this.#diagnosticQueue = [];
+      return;
+    }
+
+    this.#diagnosticFlushing = true;
+    const batch = this.#diagnosticQueue.splice(0, 20);
+
+    try {
+      const profile = await this.#device.getProfile();
+
+      if (!this.#diagnosticsOpen()) {
+        return;
+      }
+
+      await this.#api.reportDiagnostics(
+        batch.map((item) => diagnosticCrash(item, profile.platform)),
+      );
+    } catch {
+      return;
+    } finally {
+      this.#diagnosticFlushing = false;
+    }
+
+    if (this.#diagnosticQueue.length > 0) {
+      void Promise.resolve().then(() => {
+        void this.#flushDiagnostics();
+      });
     }
   }
 
@@ -408,6 +554,7 @@ export class NotifiableClientImpl implements NotifiableClient {
     readonly subscriber?: Subscriber | null;
     readonly clientConfig?: DeliveryConfig | null;
     readonly devIndicator?: DevIndicatorChoice | null;
+    readonly diagnostics?: DiagnosticsChoice | null;
     readonly deepLinks?: readonly DeepLink[] | null;
     readonly error?: NotifiableError | null;
   }): void {
@@ -429,6 +576,10 @@ export class NotifiableClientImpl implements NotifiableClient {
         patch.devIndicator !== undefined
           ? patch.devIndicator
           : this.#snapshot.devIndicator,
+      diagnostics:
+        patch.diagnostics !== undefined
+          ? patch.diagnostics
+          : this.#snapshot.diagnostics,
       deepLinks:
         patch.deepLinks !== undefined
           ? patch.deepLinks
@@ -440,6 +591,37 @@ export class NotifiableClientImpl implements NotifiableClient {
       listener();
     }
   }
+}
+
+interface PendingDiagnostic {
+  readonly id: string;
+  readonly occurredAt: string;
+  readonly type: string;
+  readonly message: string;
+  readonly frames: readonly StackFrame[];
+  readonly subscriberId?: string;
+}
+
+function diagnosticCrash(
+  item: PendingDiagnostic,
+  platform: MobilePlatform,
+): DiagnosticCrash {
+  return {
+    id: item.id,
+    kind: "crash",
+    sdk: "react-native",
+    sdkVersion,
+    platform,
+    occurredAt: item.occurredAt,
+    error: {
+      type: item.type,
+      message: item.message,
+      frames: item.frames,
+    },
+    ...(item.subscriberId !== undefined
+      ? { subscriberId: item.subscriberId }
+      : {}),
+  };
 }
 
 function runQueued<T>(

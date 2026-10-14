@@ -1,4 +1,5 @@
 import type { DeepLink } from "../domain/deep-link";
+import type { DiagnosticCrash } from "../domain/diagnostic";
 import type { EventProperty, RecordedEvent } from "../domain/event";
 import { NotifiableError } from "../domain/errors";
 import type {
@@ -41,6 +42,7 @@ export interface SdkApi {
     properties?: Readonly<Record<string, EventProperty>>,
   ): Promise<RecordedEvent>;
   saveDeepLinks(links: readonly DeepLink[]): Promise<readonly DeepLink[]>;
+  reportDiagnostics(items: readonly DiagnosticCrash[]): Promise<number>;
 }
 
 export function createSdkApi(http: HttpClient): SdkApi {
@@ -141,6 +143,39 @@ export function createSdkApi(http: HttpClient): SdkApi {
       });
 
       return parseRecordedEvent(data);
+    },
+
+    async reportDiagnostics(
+      items: readonly DiagnosticCrash[],
+    ): Promise<number> {
+      const data = await http.request({
+        method: "POST",
+        path: "/v1/sdk/diagnostics",
+        body: {
+          items: items.map((item) => ({
+            id: item.id,
+            kind: item.kind,
+            sdk: item.sdk,
+            sdk_version: item.sdkVersion,
+            platform: item.platform,
+            occurred_at: item.occurredAt,
+            error: {
+              type: item.error.type,
+              message: item.error.message,
+              frames: item.error.frames.map((frame) => ({
+                function: frame.function,
+                file: frame.file,
+                line: frame.line,
+              })),
+            },
+            ...(item.subscriberId !== undefined
+              ? { subscriber_id: item.subscriberId }
+              : {}),
+          })),
+        },
+      });
+
+      return parseAccepted(data);
     },
 
     async saveDeepLinks(
@@ -305,6 +340,21 @@ function recordOrNull(
   value: unknown,
 ): Readonly<Record<string, unknown>> | null {
   return isRecord(value) ? value : null;
+}
+
+function parseAccepted(data: unknown): number {
+  if (
+    !isRecord(data) ||
+    typeof data.accepted !== "number" ||
+    !Number.isInteger(data.accepted)
+  ) {
+    throw new NotifiableError({
+      code: "network",
+      message: "The diagnostics response was invalid.",
+    });
+  }
+
+  return data.accepted;
 }
 
 function parseRecordedEvent(data: unknown): RecordedEvent {

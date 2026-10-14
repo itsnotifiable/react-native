@@ -10,6 +10,7 @@ import type {
   SubscriberIdentity,
   SubscriberWrite,
 } from "../domain/subscriber";
+import type { DiagnosticCrash } from "../domain/diagnostic";
 import type { DeepLink } from "../domain/deep-link";
 import type { InboxQuery } from "../domain/inbox";
 import type { DevicePort, PushPort } from "../platform/types";
@@ -46,17 +47,20 @@ function createApi(): SdkApi & {
   readonly updates: Array<{ id: string; identity: SubscriberIdentity }>;
   readonly inbox: string[];
   readonly deepLinks: DeepLink[][];
+  readonly diagnostics: DiagnosticCrash[][];
 } {
   const saves: SubscriberWrite[] = [];
   const updates: Array<{ id: string; identity: SubscriberIdentity }> = [];
   const inbox: string[] = [];
   const deepLinks: DeepLink[][] = [];
+  const diagnostics: DiagnosticCrash[][] = [];
 
   return {
     saves,
     updates,
     inbox,
     deepLinks,
+    diagnostics,
     getClientConfig: vi.fn(() =>
       Promise.resolve({
         environment: null,
@@ -124,6 +128,10 @@ function createApi(): SdkApi & {
         });
       },
     ),
+    reportDiagnostics: vi.fn((items: readonly DiagnosticCrash[]) => {
+      diagnostics.push([...items]);
+      return Promise.resolve(items.length);
+    }),
     saveDeepLinks: vi.fn((links: readonly DeepLink[]) => {
       const saved = links.map((link) => ({
         path: link.path,
@@ -453,5 +461,79 @@ describe("subscriber registration", () => {
       subscriberId: "sub_1",
     });
     expect(api.inbox).toEqual(['track sub_1 order.shipped {"order":"1001"}']);
+  });
+
+  it("reports a development connect failure once", async () => {
+    const api = createApi();
+    const client = createClient(createMemoryStorage(), undefined, {
+      ...api,
+      getClientConfig: () => Promise.resolve(shopConfig),
+      saveSubscriber: () =>
+        Promise.reject(
+          new NotifiableError({ code: "network", message: "offline" }),
+        ),
+    });
+
+    await expect(client.start()).rejects.toMatchObject({
+      code: "network",
+      message: "offline",
+    });
+    await expect(client.start()).rejects.toMatchObject({
+      code: "network",
+      message: "offline",
+    });
+    await vi.waitFor(() => {
+      expect(api.diagnostics).toHaveLength(1);
+    });
+    expect(api.diagnostics[0]?.[0]).toMatchObject({
+      kind: "crash",
+      sdk: "react-native",
+      sdkVersion: "0.0.0",
+      platform: "ios",
+      error: {
+        type: "NotifiableError.network",
+        message: "offline",
+      },
+    });
+    expect(api.diagnostics[0]?.[0]?.subscriberId).toBeUndefined();
+    expect(api.diagnostics[0]?.[0]?.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+  });
+
+  it("does not report when diagnostics are disabled", async () => {
+    const api = createApi();
+    const client = createClient(createMemoryStorage(), undefined, {
+      ...api,
+      getClientConfig: () => Promise.resolve(shopConfig),
+      saveSubscriber: () =>
+        Promise.reject(
+          new NotifiableError({ code: "network", message: "offline" }),
+        ),
+    });
+
+    await client.setDiagnostics(false);
+    await expect(client.start()).rejects.toMatchObject({ code: "network" });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    expect(api.diagnostics).toEqual([]);
+  });
+
+  it("does not report a production connect failure", async () => {
+    const api = createApi();
+    const client = createClient(createMemoryStorage(), undefined, {
+      ...api,
+      getClientConfig: () =>
+        Promise.resolve({ ...shopConfig, environment: "production" }),
+      saveSubscriber: () =>
+        Promise.reject(
+          new NotifiableError({ code: "network", message: "offline" }),
+        ),
+    });
+
+    await expect(client.start()).rejects.toMatchObject({ code: "network" });
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    expect(api.diagnostics).toEqual([]);
   });
 });

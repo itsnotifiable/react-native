@@ -198,7 +198,8 @@ function RecapSheet({
 }
 
 function ErrorTrackingSwitch(): React.JSX.Element {
-  const [enabled, setEnabled] = useState(true);
+  const notifiable = useNotifiable();
+  const enabled = notifiable.diagnostics !== "disabled";
 
   return (
     <View style={styles.diagnosticsBox}>
@@ -215,7 +216,7 @@ function ErrorTrackingSwitch(): React.JSX.Element {
           accessibilityState={{ checked: enabled }}
           hitSlop={8}
           onPress={() => {
-            setEnabled((current) => !current);
+            void notifiable.setDiagnostics(!enabled);
           }}
           style={[styles.switchTrack, enabled ? styles.switchOn : null]}
         >

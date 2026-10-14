@@ -53,6 +53,7 @@ describe("useNotifiable", () => {
       subscriber: null,
       clientConfig: null,
       devIndicator: null,
+      diagnostics: null,
       deepLinks: null,
       error: null,
     };
@@ -67,6 +68,7 @@ describe("useNotifiable", () => {
       requestPermission: vi.fn(() => Promise.resolve("denied" as const)),
       identify: vi.fn(),
       setDevIndicator: vi.fn(() => Promise.resolve()),
+      setDiagnostics: vi.fn(() => Promise.resolve()),
       listNotifications: vi.fn(() =>
         Promise.resolve({
           notifications: [],

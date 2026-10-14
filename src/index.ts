@@ -4,6 +4,7 @@ export type {
   ClientEnvironment,
   DeepLink,
   DeliveryConfig,
+  DiagnosticsChoice,
   DevIndicatorChoice,
   DevicePort,
   EventProperty,

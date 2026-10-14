@@ -410,6 +410,78 @@ describe("sdk api", () => {
     });
   });
 
+  it("sends a crash diagnostic", async () => {
+    let request: {
+      url: string;
+      method: string | undefined;
+      body: string | undefined;
+    } = { url: "", method: undefined, body: undefined };
+    const fetchImpl: FetchLike = (url, init) => {
+      request = { url, method: init?.method, body: init?.body };
+      return Promise.resolve(
+        jsonResponse(202, envelope({ accepted: 1 }, "DIAGNOSTICS_ACCEPTED")),
+      );
+    };
+    const api = createSdkApi(
+      createHttpClient({
+        baseUrl: "http://127.0.0.1:8000/api",
+        publicKey: "ntf_pub_test",
+        fetch: fetchImpl,
+      }),
+    );
+
+    await expect(
+      api.reportDiagnostics([
+        {
+          id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+          kind: "crash",
+          sdk: "react-native",
+          sdkVersion: "0.0.0",
+          platform: "ios",
+          occurredAt: "2026-10-14T00:00:00.000Z",
+          error: {
+            type: "NotifiableError.network",
+            message: "offline",
+            frames: [
+              {
+                function: "NotifiableClientImpl.#syncDevice",
+                file: "/src/client/notifiable-client.ts",
+                line: 266,
+              },
+            ],
+          },
+        },
+      ]),
+    ).resolves.toBe(1);
+    expect(request).toEqual({
+      url: "http://127.0.0.1:8000/api/v1/sdk/diagnostics",
+      method: "POST",
+      body: JSON.stringify({
+        items: [
+          {
+            id: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            kind: "crash",
+            sdk: "react-native",
+            sdk_version: "0.0.0",
+            platform: "ios",
+            occurred_at: "2026-10-14T00:00:00.000Z",
+            error: {
+              type: "NotifiableError.network",
+              message: "offline",
+              frames: [
+                {
+                  function: "NotifiableClientImpl.#syncDevice",
+                  file: "/src/client/notifiable-client.ts",
+                  line: 266,
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    });
+  });
+
   it("reports network failures", async () => {
     const fetchImpl: FetchLike = () => Promise.reject(new Error("offline"));
     const api = createSdkApi(

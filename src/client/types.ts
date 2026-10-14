@@ -9,6 +9,7 @@ import type {
 import type { NotifiableError } from "../domain/errors";
 import type { DeepLink } from "../domain/deep-link";
 import type { EventProperty, RecordedEvent } from "../domain/event";
+import type { DiagnosticsChoice } from "../domain/diagnostic";
 import type { DevIndicatorChoice } from "../domain/dev-indicator";
 import type {
   InboxPage,
@@ -36,6 +37,7 @@ export interface NotifiableSnapshot {
   readonly subscriber: Subscriber | null;
   readonly clientConfig: DeliveryConfig | null;
   readonly devIndicator: DevIndicatorChoice | null;
+  readonly diagnostics: DiagnosticsChoice | null;
   readonly deepLinks: readonly DeepLink[] | null;
   readonly error: NotifiableError | null;
 }
@@ -46,6 +48,7 @@ export interface NotifiableClient {
   requestPermission(): Promise<PermissionStatus>;
   identify(input: IdentifyInput): Promise<Subscriber>;
   setDevIndicator(enabled: boolean): Promise<void>;
+  setDiagnostics(enabled: boolean): Promise<void>;
   listNotifications(
     subscriberId: string,
     query?: InboxQuery,
@@ -70,12 +73,14 @@ export interface NotifiableBinding {
   readonly subscriber: Subscriber | null;
   readonly clientConfig: DeliveryConfig | null;
   readonly devIndicator: DevIndicatorChoice | null;
+  readonly diagnostics: DiagnosticsChoice | null;
   readonly deepLinks: readonly DeepLink[] | null;
   readonly error: NotifiableError | null;
   start(): Promise<void>;
   requestPermission(): Promise<PermissionStatus>;
   identify(input: IdentifyInput): Promise<Subscriber>;
   setDevIndicator(enabled: boolean): Promise<void>;
+  setDiagnostics(enabled: boolean): Promise<void>;
   inbox(query?: InboxQuery): Promise<InboxPage>;
   notification(notificationId: string): Promise<SubscriberNotification>;
   openNotification(notificationId: string): Promise<void>;
@@ -91,6 +96,7 @@ export type { KeyValueStore } from "../domain/storage";
 export type { NotifiableEnvironment } from "../domain/environment";
 export type { DeepLink } from "../domain/deep-link";
 export type { EventProperty, RecordedEvent } from "../domain/event";
+export type { DiagnosticsChoice } from "../domain/diagnostic";
 export type { DevIndicatorChoice } from "../domain/dev-indicator";
 export type {
   InboxPage,

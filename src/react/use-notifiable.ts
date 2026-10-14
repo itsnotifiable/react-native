@@ -35,6 +35,10 @@ export function useNotifiable(): NotifiableBinding {
     (enabled: boolean) => client.setDevIndicator(enabled),
     [client],
   );
+  const setDiagnostics = useCallback(
+    (enabled: boolean) => client.setDiagnostics(enabled),
+    [client],
+  );
   const inbox = useCallback(
     (query?: InboxQuery) =>
       query === undefined ? client.inbox() : client.inbox(query),
@@ -67,12 +71,14 @@ export function useNotifiable(): NotifiableBinding {
     subscriber: snapshot.subscriber,
     clientConfig: snapshot.clientConfig,
     devIndicator: snapshot.devIndicator,
+    diagnostics: snapshot.diagnostics,
     deepLinks: snapshot.deepLinks,
     error: snapshot.error,
     start,
     requestPermission,
     identify,
     setDevIndicator,
+    setDiagnostics,
     inbox,
     notification,
     openNotification,
