@@ -485,6 +485,29 @@ function Home({
           void run(() => notifiable.track('order.shipped', { order: '1001' }));
         }}
       />
+      <Action
+        label="Report sample errors"
+        disabled={busy || !notifiable.ready}
+        onPress={() => {
+          void run(async () => {
+            const attempts = [
+              () => notifiable.identify({ email: ' ' }),
+              () => notifiable.identify({ externalId: ' ' }),
+              () => notifiable.identify({}),
+              () =>
+                notifiable.notification('00000000-0000-4000-8000-000000000001'),
+            ];
+
+            for (const attempt of attempts) {
+              try {
+                await attempt();
+              } catch {
+                // These failures are expected. The SDK reports each one.
+              }
+            }
+          });
+        }}
+      />
       {pages.map(page => (
         <Action
           key={page.path}
