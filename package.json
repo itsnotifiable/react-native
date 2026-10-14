@@ -1,7 +1,14 @@
 {
   "name": "@notifiable/react-native",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "React Native SDK for Notifiable.",
+  "homepage": "https://notifiable.sh",
+  "keywords": [
+    "notifiable",
+    "react-native",
+    "push-notifications",
+    "notifications"
+  ],
   "author": {
     "name": "Notifiable",
     "url": "https://notifiable.sh"
@@ -20,11 +27,19 @@
   "react-native": "./src/index.ts",
   "files": [
     "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
     "lib",
     "ios",
     "android",
-    "notifiable-react-native.podspec"
+    "notifiable-react-native.podspec",
+    "README.md",
+    "LICENSE",
+    ".github/ressources/icon.png"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",

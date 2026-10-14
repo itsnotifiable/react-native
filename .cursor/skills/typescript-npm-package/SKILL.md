@@ -42,7 +42,19 @@ Keep these flags:
 "main": "./lib/index.js",
 "types": "./lib/index.d.ts",
 "react-native": "./src/index.ts",
-"files": ["src", "lib", "ios", "notifiable-react-native.podspec"],
+"files": [
+  "src",
+  "!src/**/*.test.ts",
+  "!src/**/*.test.tsx",
+  "lib",
+  "ios",
+  "android",
+  "notifiable-react-native.podspec",
+  "README.md",
+  "LICENSE",
+  ".github/ressources/icon.png"
+],
+"publishConfig": { "access": "public" },
 "exports": {
   ".": {
     "types": "./lib/index.d.ts",
@@ -52,7 +64,7 @@ Keep these flags:
 }
 ```
 
-Metro reads `react-native` and compiles `src/` itself. Node and TypeScript read `lib/`. Publish both. `sideEffects` stays `false`.
+Metro reads `react-native` and compiles `src/` itself. Node and TypeScript read `lib/`. Publish both. `sideEffects` stays `false`. The `files` patterns drop `src/**/*.test.ts` and `src/**/*.test.tsx`. `.npmignore` also drops the example app and local tooling. `publishConfig.access` is `public` so the `@notifiable` scope installs from the public registry.
 
 There is one export, `.`. Do not add deep export paths. Apps import `@notifiable/react-native` only.
 
