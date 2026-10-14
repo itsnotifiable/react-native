@@ -48,6 +48,7 @@ export default tseslint.config(
       "coverage/**",
       "example/**",
       "test/**",
+      "scripts/**",
     ],
   },
   eslint.configs.recommended,

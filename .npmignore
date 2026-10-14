@@ -16,3 +16,5 @@ vitest.config.ts
 .prettierrc.json
 tsconfig.json
 tsconfig.build.json
+scripts
+.husky
