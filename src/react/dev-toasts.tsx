@@ -33,6 +33,7 @@ export function DevToasts(): React.JSX.Element | null {
   const client = useContext(NotifiableContext);
   const notifiable = useNotifiable();
   const subscriberId = notifiable.subscriber?.id ?? null;
+  const permission = notifiable.permission;
   const icon = toastIcon(notifiable.clientConfig?.app?.icon);
   const queueRef = useRef<QueuedToast[]>([]);
   const currentRef = useRef<QueuedToast | null>(null);
@@ -58,14 +59,14 @@ export function DevToasts(): React.JSX.Element | null {
   };
 
   useEffect(() => {
-    if (client === null || subscriberId === null) {
+    if (client === null || subscriberId === null || permission !== "granted") {
       return;
     }
 
     return pollInbox(client, subscriberId, (items) => {
       presentRef.current(items);
     });
-  }, [client, subscriberId]);
+  }, [client, subscriberId, permission]);
 
   function advance(): void {
     const next = queueRef.current.shift() ?? null;
