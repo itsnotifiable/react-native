@@ -292,6 +292,9 @@ export class NotifiableClientImpl implements NotifiableClient {
     const profile = await this.#device.getProfile();
     const permission = options.permission ?? (await this.#currentPermission());
     const token = await this.#tokenFor(permission);
+    // The API rejects granted unless provider and token are present.
+    const savedPermission =
+      token === null && permission === "granted" ? "not_determined" : permission;
     const anonymousId =
       session.subscriberId === null
         ? (session.anonymousId ?? undefined)
@@ -300,7 +303,7 @@ export class NotifiableClientImpl implements NotifiableClient {
     const write: SubscriberWrite = {
       deviceId: session.deviceId,
       platform: profile.platform,
-      permission,
+      permission: savedPermission,
       sdkVersion,
       ...(token !== null
         ? { token: token.token, provider: token.provider }
@@ -334,13 +337,13 @@ export class NotifiableClientImpl implements NotifiableClient {
     this.#session = nextSession;
     this.#commit({
       ready: true,
-      permission,
+      permission: savedPermission,
       subscriber,
       error: null,
     });
     this.#logger.info("Subscriber saved", {
       subscriberId: subscriber.id,
-      permission,
+      permission: savedPermission,
     });
   }
 
@@ -374,6 +377,10 @@ export class NotifiableClientImpl implements NotifiableClient {
     const token = (await push.getToken())?.trim() ?? "";
 
     if (token.length === 0) {
+      if (push.allowMissingToken === true) {
+        return null;
+      }
+
       throw new NotifiableError({
         code: "missing_token",
         message:
@@ -461,22 +468,29 @@ export class NotifiableClientImpl implements NotifiableClient {
   }
 
   #capture<T>(task: () => Promise<T>): Promise<T> {
-    let pending: Promise<T>;
+    return new Promise<T>((resolve, reject) => {
+      let pending: Promise<T>;
 
-    try {
-      pending = task();
-    } catch (error) {
-      this.#report(error);
-      throw error;
-    }
-
-    return pending.then(
-      (value) => value,
-      (error: unknown) => {
+      try {
+        pending = task();
+      } catch (error) {
         this.#report(error);
-        throw error;
-      },
-    );
+        reject(asNotifiableError(error));
+        return;
+      }
+
+      // Throw inside this rejection handler makes Hermes report the poll
+      // failure as uncaught, even when the caller catches it.
+      pending.then(
+        (value) => {
+          resolve(value);
+        },
+        (error: unknown) => {
+          this.#report(error);
+          reject(asNotifiableError(error));
+        },
+      );
+    });
   }
 
   #diagnosticsOpen(): boolean {

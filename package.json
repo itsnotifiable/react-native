@@ -1,6 +1,6 @@
 {
   "name": "@notifiable/react-native",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "description": "React Native SDK for Notifiable.",
   "homepage": "https://notifiable.sh",
   "keywords": [
@@ -56,7 +56,9 @@
     "lint": "eslint .",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "husky",
+    "version:bump": "node scripts/bump-version.mjs"
   },
   "peerDependencies": {
     "@react-native-async-storage/async-storage": ">=1.21.0",
@@ -73,6 +75,7 @@
     "@types/react": "^19.2.2",
     "@types/react-test-renderer": "^19.1.0",
     "eslint": "^9.39.1",
+    "husky": "^9.1.7",
     "prettier": "^3.6.2",
     "react": "^19.2.0",
     "react-test-renderer": "^19.2.0",

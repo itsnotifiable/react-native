@@ -72,6 +72,10 @@ There is one export, `.`. Do not add deep export paths. Apps import `@notifiable
 
 `prepublishOnly` runs `npm run build`. Do not commit `lib/`.
 
+## Release
+
+Husky bumps the version on every commit to `main`, then `npm publish` runs when that branch is pushed. The patch digit stops at 9: `0.1.9` becomes `0.2.0`, and `0.9.9` becomes `1.0.0`. A commit on another branch does not bump or publish. These hooks run locally. A merge made on GitHub.com does not run them.
+
 ## Checks
 
 From the package root, before finishing a code change:
