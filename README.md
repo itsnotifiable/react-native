@@ -126,7 +126,7 @@ function EnableNotifications() {
 
 ### See a notification on a simulator or emulator
 
-A development key polls for new notifications while the app is in the foreground. Send one from the dashboard and it shows at the top of the iOS simulator or Android emulator. You can check the title, the tap, and the route without a physical device and without a push certificate.
+A development key polls for new notifications while the app is in the foreground, after notification permission is granted. Send one from the dashboard and it shows at the top of the iOS simulator or Android emulator. You can check the title, the tap, and the route without a physical device and without a push certificate.
 
 The toast stays up for a recent unread alert, records the open, and calls `onDeepLink` with the url when someone taps it. A tap also records a click when the notification has a delivery.
 
