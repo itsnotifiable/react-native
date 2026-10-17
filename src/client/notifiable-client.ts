@@ -468,22 +468,29 @@ export class NotifiableClientImpl implements NotifiableClient {
   }
 
   #capture<T>(task: () => Promise<T>): Promise<T> {
-    let pending: Promise<T>;
+    return new Promise<T>((resolve, reject) => {
+      let pending: Promise<T>;
 
-    try {
-      pending = task();
-    } catch (error) {
-      this.#report(error);
-      throw error;
-    }
-
-    return pending.then(
-      (value) => value,
-      (error: unknown) => {
+      try {
+        pending = task();
+      } catch (error) {
         this.#report(error);
-        throw error;
-      },
-    );
+        reject(asNotifiableError(error));
+        return;
+      }
+
+      // Throw inside this rejection handler makes Hermes report the poll
+      // failure as uncaught, even when the caller catches it.
+      pending.then(
+        (value) => {
+          resolve(value);
+        },
+        (error: unknown) => {
+          this.#report(error);
+          reject(asNotifiableError(error));
+        },
+      );
+    });
   }
 
   #diagnosticsOpen(): boolean {
