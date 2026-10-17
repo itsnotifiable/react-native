@@ -371,6 +371,29 @@ describe("subscriber registration", () => {
     expect(client.getSnapshot().error?.code).toBe("missing_token");
   });
 
+  it("saves not_determined when a granted permission has no token", async () => {
+    const api = createApi();
+    const push: PushPort = {
+      provider: "expo",
+      allowMissingToken: true,
+      getPermissionStatus: () => Promise.resolve("granted"),
+      requestPermission: () => Promise.resolve("granted"),
+      getToken: () => Promise.resolve(null),
+    };
+    const client = createClient(createMemoryStorage(), push, api);
+
+    await client.start();
+
+    expect(client.getSnapshot()).toMatchObject({
+      ready: true,
+      permission: "not_determined",
+      error: null,
+    });
+    expect(api.saves[0]?.permission).toBe("not_determined");
+    expect(api.saves[0]?.token).toBeUndefined();
+    expect(api.saves[0]?.provider).toBeUndefined();
+  });
+
   it("identifies an anonymous subscriber by email", async () => {
     const api = createApi();
     const storage = createMemoryStorage();

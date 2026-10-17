@@ -348,13 +348,26 @@ function IdentifierLine({
 }
 
 function CopyButton({ value }: { readonly value: string }): React.JSX.Element {
+  const { config } = useNotifiable();
+
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Copy ${value}`}
       hitSlop={8}
       onPress={() => {
-        copyText(value);
+        try {
+          const device = config.device;
+
+          if (typeof device?.copy === "function") {
+            device.copy(value);
+            return;
+          }
+
+          copyText(value);
+        } catch {
+          return;
+        }
       }}
       style={styles.copyButton}
     >
@@ -365,28 +378,49 @@ function CopyButton({ value }: { readonly value: string }): React.JSX.Element {
 }
 
 function useApplicationId(): string | null {
+  const { config } = useNotifiable();
+  const device = config.device;
   const [applicationId, setApplicationId] = useState<string | null>(null);
 
   useEffect(() => {
-    const read = readDeviceInfo();
     const state = { active: true };
+    const apply = (value: string | null): void => {
+      if (state.active) {
+        setApplicationId(value);
+      }
+    };
+    const pending = device?.getApplicationId?.();
+
+    if (pending !== undefined) {
+      void pending
+        .then((value) => {
+          apply(value !== null && value.length > 0 ? value : null);
+        })
+        .catch(() => undefined);
+
+      return () => {
+        state.active = false;
+      };
+    }
+
+    const read = readDeviceInfo();
 
     if (read === null) {
-      return;
+      return () => {
+        state.active = false;
+      };
     }
 
     void read()
       .then((info) => {
-        if (state.active) {
-          setApplicationId(applicationIdFrom(info));
-        }
+        apply(applicationIdFrom(info));
       })
       .catch(() => undefined);
 
     return () => {
       state.active = false;
     };
-  }, []);
+  }, [device]);
 
   return applicationId;
 }
