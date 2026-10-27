@@ -319,14 +319,10 @@ function parseSubscriber(data: unknown): Subscriber {
     });
   }
 
-  const provider = data.provider ?? null;
-
-  if (provider !== null && !isPushProvider(provider)) {
-    throw new NotifiableError({
-      code: "network",
-      message: "The subscriber response was invalid.",
-    });
-  }
+  // Unknown values (including legacy "expo") become null so old sessions load.
+  const rawProvider = data.provider ?? null;
+  const provider =
+    rawProvider !== null && isPushProvider(rawProvider) ? rawProvider : null;
 
   return {
     id: data.id,

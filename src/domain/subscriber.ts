@@ -4,7 +4,13 @@ export type DevicePlatform = "ios" | "android" | "web";
 
 export type MobilePlatform = "ios" | "android";
 
-export type PushProvider = "apns" | "fcm" | "expo" | "web_push";
+export type PushProvider = "apns" | "fcm" | "web_push";
+
+export function pushProviderForPlatform(
+  platform: MobilePlatform,
+): Exclude<PushProvider, "web_push"> {
+  return platform === "ios" ? "apns" : "fcm";
+}
 
 export interface Subscriber {
   readonly id: string;
@@ -99,10 +105,5 @@ export function isDevicePlatform(value: unknown): value is DevicePlatform {
 }
 
 export function isPushProvider(value: unknown): value is PushProvider {
-  return (
-    value === "apns" ||
-    value === "fcm" ||
-    value === "expo" ||
-    value === "web_push"
-  );
+  return value === "apns" || value === "fcm" || value === "web_push";
 }

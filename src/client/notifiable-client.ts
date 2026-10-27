@@ -26,16 +26,17 @@ import type {
 import type { Logger } from "../domain/logger";
 import { localeParts } from "../domain/locale";
 import type { KeyValueStore } from "../domain/storage";
-import type {
-  DeliveryConfig,
-  IdentifyInput,
-  PermissionStatus,
-  MobilePlatform,
-  PushProvider,
-  StoredSession,
-  Subscriber,
-  SubscriberIdentity,
-  SubscriberWrite,
+import {
+  pushProviderForPlatform,
+  type DeliveryConfig,
+  type IdentifyInput,
+  type PermissionStatus,
+  type MobilePlatform,
+  type PushProvider,
+  type StoredSession,
+  type Subscriber,
+  type SubscriberIdentity,
+  type SubscriberWrite,
 } from "../domain/subscriber";
 import type { DevicePort } from "../platform/types";
 import type { SdkApi } from "../transport/sdk-api";
@@ -222,10 +223,14 @@ export class NotifiableClientImpl implements NotifiableClient {
     }
 
     this.#logger.info("Permission prompt requested");
-    await this.#requestPermission();
+    // Dashboard prompts must clear even when a token cannot be created
+    // (Expo Go / missing FCM). Explicit requestPermission still throws.
+    await this.#requestPermission({ softMissingToken: true });
   }
 
-  async #requestPermission(): Promise<PermissionStatus> {
+  async #requestPermission(
+    options: { readonly softMissingToken?: boolean } = {},
+  ): Promise<PermissionStatus> {
     return this.#guard(async () => {
       const push = this.config.push;
 
@@ -236,7 +241,27 @@ export class NotifiableClientImpl implements NotifiableClient {
         });
       }
 
-      const permission = await push.requestPermission();
+      let permission: PermissionStatus;
+
+      try {
+        permission = await push.requestPermission();
+      } catch (error) {
+        const wrapped = asNotifiableError(error);
+
+        if (
+          options.softMissingToken === true &&
+          wrapped.code === "missing_token"
+        ) {
+          await this.#syncDevice({
+            prompted: true,
+            permission: "not_determined",
+          });
+          return this.#snapshot.permission;
+        }
+
+        throw wrapped;
+      }
+
       await this.#syncDevice({ prompted: true, permission });
       return this.#snapshot.permission;
     });
@@ -291,7 +316,7 @@ export class NotifiableClientImpl implements NotifiableClient {
 
     const profile = await this.#device.getProfile();
     const permission = options.permission ?? (await this.#currentPermission());
-    const token = await this.#tokenFor(permission);
+    const token = await this.#tokenFor(permission, profile.platform);
     // The API rejects granted unless provider and token are present.
     const savedPermission =
       token === null && permission === "granted" ? "not_determined" : permission;
@@ -357,7 +382,10 @@ export class NotifiableClientImpl implements NotifiableClient {
     return push.getPermissionStatus();
   }
 
-  async #tokenFor(permission: PermissionStatus): Promise<{
+  async #tokenFor(
+    permission: PermissionStatus,
+    platform: MobilePlatform,
+  ): Promise<{
     readonly token: string;
     readonly provider: PushProvider;
   } | null> {
@@ -388,7 +416,9 @@ export class NotifiableClientImpl implements NotifiableClient {
       });
     }
 
-    return { token, provider: push.provider };
+    const provider = push.provider ?? pushProviderForPlatform(platform);
+
+    return { token, provider };
   }
 
   async #saveDeepLinks(): Promise<void> {

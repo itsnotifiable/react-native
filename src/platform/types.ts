@@ -2,7 +2,11 @@ import type { DeviceProfile, PushProvider } from "../domain/subscriber";
 import type { PermissionStatus } from "../domain/subscriber";
 
 export interface PushPort {
-  readonly provider: PushProvider;
+  /**
+   * Push service for the device token. When omitted, the client picks `apns`
+   * on iOS and `fcm` on Android.
+   */
+  readonly provider?: PushProvider;
   /**
    * When true, a granted permission with an empty token still saves the
    * subscriber. The save omits the token and sends not_determined, because

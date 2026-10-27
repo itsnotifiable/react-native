@@ -4,6 +4,7 @@ import {
   NotifiableProvider,
   createNotifiable,
   notifiableErrorCodes,
+  pushProviderForPlatform,
   useNotifiable,
 } from "./index";
 
@@ -12,6 +13,9 @@ describe("public exports", () => {
     expect(typeof createNotifiable).toBe("function");
     expect(typeof NotifiableProvider).toBe("function");
     expect(typeof useNotifiable).toBe("function");
+    expect(typeof pushProviderForPlatform).toBe("function");
+    expect(pushProviderForPlatform("ios")).toBe("apns");
+    expect(pushProviderForPlatform("android")).toBe("fcm");
     expect(NotifiableError.prototype).toBeInstanceOf(Error);
   });
 });
