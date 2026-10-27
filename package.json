@@ -1,6 +1,6 @@
 {
   "name": "@notifiable/react-native",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "React Native SDK for Notifiable.",
   "homepage": "https://notifiable.sh",
   "keywords": [

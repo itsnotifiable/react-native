@@ -58,7 +58,7 @@ function runPublish(otp) {
     env.npm_config_otp = otp;
   }
 
-  return spawnSync("npm", ["publish"], {
+  return spawnSync("npm", ["publish", "--access", "public"], {
     encoding: "utf8",
     env,
     stdio: ["inherit", "pipe", "pipe"],
