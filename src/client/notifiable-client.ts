@@ -222,10 +222,14 @@ export class NotifiableClientImpl implements NotifiableClient {
     }
 
     this.#logger.info("Permission prompt requested");
-    await this.#requestPermission();
+    // Dashboard prompts must clear even when a token cannot be created
+    // (Expo Go / missing FCM). Explicit requestPermission still throws.
+    await this.#requestPermission({ softMissingToken: true });
   }
 
-  async #requestPermission(): Promise<PermissionStatus> {
+  async #requestPermission(
+    options: { readonly softMissingToken?: boolean } = {},
+  ): Promise<PermissionStatus> {
     return this.#guard(async () => {
       const push = this.config.push;
 
@@ -236,7 +240,27 @@ export class NotifiableClientImpl implements NotifiableClient {
         });
       }
 
-      const permission = await push.requestPermission();
+      let permission: PermissionStatus;
+
+      try {
+        permission = await push.requestPermission();
+      } catch (error) {
+        const wrapped = asNotifiableError(error);
+
+        if (
+          options.softMissingToken === true &&
+          wrapped.code === "missing_token"
+        ) {
+          await this.#syncDevice({
+            prompted: true,
+            permission: "not_determined",
+          });
+          return this.#snapshot.permission;
+        }
+
+        throw wrapped;
+      }
+
       await this.#syncDevice({ prompted: true, permission });
       return this.#snapshot.permission;
     });

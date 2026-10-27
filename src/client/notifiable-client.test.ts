@@ -330,6 +330,46 @@ describe("subscriber registration", () => {
     expect(client.getSnapshot().subscriber?.promptPermission).toBe(false);
   });
 
+  it("clears a dashboard prompt when the push port throws missing_token", async () => {
+    const api = createApi();
+    const saves: SubscriberWrite[] = [];
+    const prompting: SdkApi = {
+      ...api,
+      saveSubscriber: (write: SubscriberWrite) => {
+        saves.push(write);
+        return Promise.resolve({
+          ...subscriberFrom(write),
+          promptPermission: write.prompted !== true,
+        });
+      },
+    };
+    const push: PushPort = {
+      provider: "expo",
+      allowMissingToken: true,
+      getPermissionStatus: () => Promise.resolve("not_determined"),
+      requestPermission: () =>
+        Promise.reject(
+          new NotifiableError({
+            code: "missing_token",
+            message: "no Expo token",
+          }),
+        ),
+      getToken: () => Promise.resolve(null),
+    };
+    const client = createClient(createMemoryStorage(), push, prompting);
+
+    await client.start();
+
+    expect(saves).toHaveLength(2);
+    expect(saves[1]).toMatchObject({
+      permission: "not_determined",
+      prompted: true,
+    });
+    expect(saves[1]?.token).toBeUndefined();
+    expect(client.getSnapshot().subscriber?.promptPermission).toBe(false);
+    expect(client.getSnapshot().error).toBeNull();
+  });
+
   it("updates permission after a denial without dropping the subscriber", async () => {
     const api = createApi();
     const push: PushPort = {
