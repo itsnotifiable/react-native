@@ -58,18 +58,18 @@ function App() {
 
 ### Push port
 
-`provider` is `"apns"`, `"fcm"`, `"expo"`, or `"web_push"`.
+`provider` is optional. When omitted, the client sends `"apns"` on iOS and `"fcm"` on Android. You may still pass `"apns"`, `"fcm"`, or `"web_push"` explicitly.
 
 ```ts
 const push = {
-  provider: "fcm" as const,
+  // provider omitted → apns on iOS, fcm on Android
   getPermissionStatus: () => Promise.resolve(status), // optional
   requestPermission: () => askTheOperatingSystem(),   // returns granted | denied | not_determined
-  getToken: () => Promise.resolve(token),             // string or null
+  getToken: () => Promise.resolve(token),             // real APNs or FCM device token, or null
 };
 ```
 
-The token is saved only when permission is `granted` and `getToken()` returns a string. Otherwise you get `missing_token` and the grant is not registered.
+The token is saved only when permission is `granted` and `getToken()` returns a string. Otherwise you get `missing_token` and the grant is not registered. This package does not fetch tokens itself — use your app’s FCM/APNs stack (or `@notifiable/expo` in an Expo app).
 
 ### Permission
 
@@ -209,7 +209,7 @@ Integrate @notifiable/react-native into this React Native project.
 1. Install @notifiable/react-native and @react-native-async-storage/async-storage if missing.
 2. Find the app root / navigation root. Wrap it in NotifiableProvider from @notifiable/react-native.
 3. Pass publicKey from the project’s env (development key for debug, production key for release).
-4. Implement a push port from this app’s existing notification stack (provider: apns | fcm | expo | web_push) with requestPermission and getToken. Pass it as the push prop. Do not add Firebase/APNs/Expo libraries from the SDK — use what the app already has, or ask before adding new native deps.
+4. Implement a push port from this app’s existing FCM/APNs stack with requestPermission and getToken (real device tokens). provider is optional (defaults to apns on iOS, fcm on Android). Pass it as the push prop. Do not add Firebase/APNs libraries from the SDK — use what the app already has, or ask before adding new native deps. For Expo apps use @notifiable/expo instead.
 5. Pass deepLinks for the main screens Notifiable should be able to open, and onDeepLink that navigates with this app’s router.
 6. After the user signs in, call identify({ email, externalId }) once ready is true.
 7. Add a clear “Enable notifications” button that calls requestPermission().

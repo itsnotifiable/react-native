@@ -344,14 +344,13 @@ describe("subscriber registration", () => {
       },
     };
     const push: PushPort = {
-      provider: "expo",
       allowMissingToken: true,
       getPermissionStatus: () => Promise.resolve("not_determined"),
       requestPermission: () =>
         Promise.reject(
           new NotifiableError({
             code: "missing_token",
-            message: "no Expo token",
+            message: "no device token",
           }),
         ),
       getToken: () => Promise.resolve(null),
@@ -414,7 +413,6 @@ describe("subscriber registration", () => {
   it("saves not_determined when a granted permission has no token", async () => {
     const api = createApi();
     const push: PushPort = {
-      provider: "expo",
       allowMissingToken: true,
       getPermissionStatus: () => Promise.resolve("granted"),
       requestPermission: () => Promise.resolve("granted"),
@@ -432,6 +430,25 @@ describe("subscriber registration", () => {
     expect(api.saves[0]?.permission).toBe("not_determined");
     expect(api.saves[0]?.token).toBeUndefined();
     expect(api.saves[0]?.provider).toBeUndefined();
+  });
+
+  it("picks apns from the device platform when provider is omitted", async () => {
+    const api = createApi();
+    const push: PushPort = {
+      getPermissionStatus: () => Promise.resolve("granted"),
+      requestPermission: () => Promise.resolve("granted"),
+      getToken: () => Promise.resolve("device-token"),
+    };
+    const client = createClient(createMemoryStorage(), push, api);
+
+    await client.start();
+
+    expect(api.saves[0]).toMatchObject({
+      permission: "granted",
+      provider: "apns",
+      token: "device-token",
+      platform: "ios",
+    });
   });
 
   it("identifies an anonymous subscriber by email", async () => {

@@ -108,4 +108,5 @@ export type {
   PushProvider,
   Subscriber,
 } from "../domain/subscriber";
+export { pushProviderForPlatform } from "../domain/subscriber";
 export type { DevicePort, PushPort } from "../platform/types";

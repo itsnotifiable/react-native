@@ -26,6 +26,7 @@ export type {
 } from "./client/types";
 export { NotifiableError, notifiableErrorCodes } from "./domain/errors";
 export type { NotifiableErrorCode } from "./domain/errors";
+export { pushProviderForPlatform } from "./domain/subscriber";
 export { NotifiableProvider } from "./react/provider";
 export type { NotifiableProviderProps } from "./react/provider";
 export { useNotifiable } from "./react/use-notifiable";

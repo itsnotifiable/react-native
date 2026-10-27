@@ -26,16 +26,17 @@ import type {
 import type { Logger } from "../domain/logger";
 import { localeParts } from "../domain/locale";
 import type { KeyValueStore } from "../domain/storage";
-import type {
-  DeliveryConfig,
-  IdentifyInput,
-  PermissionStatus,
-  MobilePlatform,
-  PushProvider,
-  StoredSession,
-  Subscriber,
-  SubscriberIdentity,
-  SubscriberWrite,
+import {
+  pushProviderForPlatform,
+  type DeliveryConfig,
+  type IdentifyInput,
+  type PermissionStatus,
+  type MobilePlatform,
+  type PushProvider,
+  type StoredSession,
+  type Subscriber,
+  type SubscriberIdentity,
+  type SubscriberWrite,
 } from "../domain/subscriber";
 import type { DevicePort } from "../platform/types";
 import type { SdkApi } from "../transport/sdk-api";
@@ -315,7 +316,7 @@ export class NotifiableClientImpl implements NotifiableClient {
 
     const profile = await this.#device.getProfile();
     const permission = options.permission ?? (await this.#currentPermission());
-    const token = await this.#tokenFor(permission);
+    const token = await this.#tokenFor(permission, profile.platform);
     // The API rejects granted unless provider and token are present.
     const savedPermission =
       token === null && permission === "granted" ? "not_determined" : permission;
@@ -381,7 +382,10 @@ export class NotifiableClientImpl implements NotifiableClient {
     return push.getPermissionStatus();
   }
 
-  async #tokenFor(permission: PermissionStatus): Promise<{
+  async #tokenFor(
+    permission: PermissionStatus,
+    platform: MobilePlatform,
+  ): Promise<{
     readonly token: string;
     readonly provider: PushProvider;
   } | null> {
@@ -412,7 +416,9 @@ export class NotifiableClientImpl implements NotifiableClient {
       });
     }
 
-    return { token, provider: push.provider };
+    const provider = push.provider ?? pushProviderForPlatform(platform);
+
+    return { token, provider };
   }
 
   async #saveDeepLinks(): Promise<void> {
