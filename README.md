@@ -1,13 +1,8 @@
-<div align="center">
-  <img src=".github/ressources/icon.png" width="120" alt="Notifiable" />
-  <h1>Notifiable - React Native SDK</h1>
-</div>
+# @notifiable/react-native
 
----
+Register a React Native app with [Notifiable](https://notifiable.sh): connect with a public key, ask for notification permission, identify the user, list their inbox, record opens and taps, and track events.
 
-`@notifiable/react-native` registers a React Native install with [Notifiable](https://notifiable.sh), asks for notification permission, and identifies the person using the app. From the same hook you can list their inbox, record that they opened or tapped a notification, and send events.
-
-Import from `@notifiable/react-native`.
+Import only from `@notifiable/react-native`. This package does not ship Firebase, APNs, or Expo — your app supplies a `push` port.
 
 ## Install
 
@@ -16,13 +11,11 @@ npm install @notifiable/react-native
 npm install @react-native-async-storage/async-storage
 ```
 
-The package needs `react` 18 or newer and `react-native` 0.73 or newer. AsyncStorage keeps the subscriber on the device between launches. If the app already has another store, pass it as `storage` and skip AsyncStorage.
+Peers: `react` ≥ 18, `react-native` ≥ 0.73. AsyncStorage keeps the subscriber between launches. If the app already has a store, pass `storage` and skip AsyncStorage. Rebuild the native app after install so device info and the real bundle id / package name are available.
 
-This package does not include Firebase, APNs, or Expo. Your app supplies permission and the device token. Rebuild the iOS and Android app after installing so the device model, app version, and the real bundle id or package name are available.
+## Integrate
 
-## Configure
-
-Wrap the app in `NotifiableProvider`. It connects on mount. Permission is asked only when you call it from a button, or when the dashboard asks for the prompt.
+Wrap the app in `NotifiableProvider`. It connects on mount. Permission is asked only when you call `requestPermission()`, or when the Notifiable dashboard requests the prompt.
 
 ```tsx
 import { NotifiableProvider, useNotifiable } from "@notifiable/react-native";
@@ -51,153 +44,79 @@ function App() {
 }
 ```
 
-| Prop | What you pass |
-| --- | --- |
-| `publicKey` | The key from the Notifiable dashboard. |
-| `push` | How this app reads permission and the device token. |
-| `deepLinks` | Screens Notifiable can link to. Each one is `{ path, label }`. Saved when connect succeeds. |
-| `onDeepLink` | Called with a notification url when someone taps a development preview. |
-| `storage` | Your own `getItem` / `setItem` / `removeItem` store. Omit it to use AsyncStorage. |
-| `logger` | Optional `debug`, `info`, `warn`, and `error` callbacks. |
-| `client` | A client you already built with `createNotifiable`. The provider starts that client and ignores `publicKey`. |
+| Prop | Required | Description |
+| --- | --- | --- |
+| `publicKey` | yes* | Key from the Notifiable dashboard. Use the **development** key while building; the **production** key in the store build. |
+| `push` | yes* | How this app reads permission and the device token. |
+| `deepLinks` | no | Routes Notifiable can link to: `{ path, label }`. Saved on connect. |
+| `onDeepLink` | no | Called with a notification url (e.g. development toast tap). |
+| `storage` | no | `{ getItem, setItem, removeItem }`. Defaults to AsyncStorage. |
+| `logger` | no | `debug` / `info` / `warn` / `error` callbacks. |
+| `client` | no | Existing client from `createNotifiable`. Ignores `publicKey`. |
 
-### Public key
+\*Required unless you pass `client`.
 
-Create the key in the Notifiable dashboard and pass it as `publicKey`. A blank key throws before the app connects.
+### Push port
 
-Use the **development** key while you build, including on the iOS simulator and the Android emulator. Use the **production** key in the build you ship. The key is what switches the app between those two modes. Keep the two keys in the matching build config, for example a dev env file and a release env file, and pass the one for the current build:
-
-```tsx
-<NotifiableProvider publicKey={publicKey} push={push}>
-  <App />
-</NotifiableProvider>
-```
-
-The same install is remembered on the device. Opening the app again updates that subscriber instead of creating a new one. Permission can stay denied or undecided. The subscriber still exists.
-
-### Push
-
-`push.provider` is `"apns"`, `"fcm"`, `"expo"`, or `"web_push"`.
+`provider` is `"apns"`, `"fcm"`, `"expo"`, or `"web_push"`.
 
 ```ts
 const push = {
   provider: "fcm" as const,
-  getPermissionStatus: () => Promise.resolve(status),
-  requestPermission: () => askTheOperatingSystem(),
-  getToken: () => Promise.resolve(token),
+  getPermissionStatus: () => Promise.resolve(status), // optional
+  requestPermission: () => askTheOperatingSystem(),   // returns granted | denied | not_determined
+  getToken: () => Promise.resolve(token),             // string or null
 };
 ```
 
-`getPermissionStatus` is optional. `requestPermission` returns `"granted"`, `"denied"`, or `"not_determined"`. `getToken` returns the device token, or `null` when there is none.
-
-The token is saved only after permission is granted and `getToken()` returns a string. If permission is granted and the token is empty, the call fails with `missing_token` and that grant is not saved.
+The token is saved only when permission is `granted` and `getToken()` returns a string. Otherwise you get `missing_token` and the grant is not registered.
 
 ### Permission
-
-Ask in either of these ways. Both go through `push.requestPermission` and then save the answer.
-
-**From a button.** Call `requestPermission()` at the moment you choose, usually after a short explanation.
 
 ```tsx
 function EnableNotifications() {
   const { requestPermission } = useNotifiable();
-
   return (
-    <Button
-      title="Enable notifications"
-      onPress={() => {
-        void requestPermission();
-      }}
-    />
+    <Button title="Enable notifications" onPress={() => void requestPermission()} />
   );
 }
 ```
 
-**Automatically.** In the Notifiable dashboard, ask this subscriber for permission. The next time the app connects, the system prompt opens on its own. That includes a later request after the person denied or dismissed the first one. Connect does not ask when the dashboard has not requested it.
-
-## Development and production
-
-| | Development key | Production key |
-| --- | --- | --- |
-| First launch | A sheet asks you to show or hide the Notifiable mark | No sheet |
-| On screen | A draggable mark. Tap it to compare this app's bundle id or package name with the dashboard | Nothing from Notifiable is drawn over the app |
-| Notifications | A notification you send from the dashboard appears as a toast at the top of the simulator or emulator | Your push provider displays the notification |
-| Diagnostics | Failed SDK calls can be shared with Notifiable. The switch starts on | Nothing is sent |
-
-### See a notification on a simulator or emulator
-
-A development key polls for new notifications while the app is in the foreground, after notification permission is granted. Send one from the dashboard and it shows at the top of the iOS simulator or Android emulator. You can check the title, the tap, and the route without a physical device and without a push certificate.
-
-The toast stays up for a recent unread alert, records the open, and calls `onDeepLink` with the url when someone taps it. A tap also records a click when the notification has a delivery.
-
-On the iOS simulator, Command N shows the mark again, including while a text field is focused.
-
-The mark's sheet compares the dashboard bundle id or package with the identifier of the app you are running. A match shows a green check. A mismatch shows what to paste into the dashboard, with a copy button. Share SDK diagnostics, on that same sheet, reports a failed SDK call once per launch. Turn it off to stop sending. [Learn what is collected](https://notifiable.sh/sdk-diagnostics).
-
-A production key skips the sheet, the mark, and these previews. People receive notifications through the push provider you passed in `push`.
+Or ask from the Notifiable dashboard: the next connect opens the system prompt automatically.
 
 ## useNotifiable
 
-Call `useNotifiable()` in any component under `NotifiableProvider`. It throws `missing_provider` outside that tree. The values update when the subscriber, permission, or last error changes.
+Call under `NotifiableProvider`. Throws `missing_provider` outside that tree. Wait until `ready` is true before `identify`, `inbox`, `notification`, `openNotification`, `clickDelivery`, or `track`.
 
 ```tsx
-function Home() {
-  const notifiable = useNotifiable();
-
-  if (!notifiable.ready) {
-    return <Text>Connecting…</Text>;
-  }
-
-  return <Text>{notifiable.subscriber?.id}</Text>;
-}
+const notifiable = useNotifiable();
+if (!notifiable.ready) return <Text>Connecting…</Text>;
 ```
-
-Wait until `ready` is true before `identify`, `inbox`, `notification`, `openNotification`, `clickDelivery`, or `track`. Those calls need the subscriber created at connect.
 
 ### State
 
-**`ready`** is true after connect has saved the subscriber.
+| Field | Meaning |
+| --- | --- |
+| `ready` | Connect finished and the subscriber was saved. |
+| `permission` | `"granted"` \| `"denied"` \| `"not_determined"` |
+| `subscriber` | Device/person record, or `null` until connect. |
+| `clientConfig` | Dashboard app record (`development` / `production`), or `null`. |
+| `deepLinks` | Saved routes, or `null`. |
+| `devIndicator` | `"enabled"` \| `"disabled"` \| `null` |
+| `diagnostics` | `"enabled"` \| `"disabled"` \| `null` (missing ⇒ sharing on in development) |
+| `error` | Last `NotifiableError`, or `null` |
+| `config` | Options this client was created with |
 
-**`permission`** is `"granted"`, `"denied"`, or `"not_determined"`.
+### Methods
 
-**`subscriber`** is the person and device Notifiable stored. It is `null` until connect finishes. `subscriber.id` is the id you will see in the dashboard. `subscriber.externalId` is set after `identify`. `subscriber.anonymousId` is set until you identify them with an email or an external id.
+**`start()`** — Connects (or no-ops if already connected). The provider calls this on mount.
 
-**`clientConfig`** is the app record from the dashboard: name, icon, and whether this key is `development` or `production`. It is `null` until connect finishes.
+**`requestPermission()`** — Shows the system prompt via your `push` port, then saves. Returns the new permission.
 
-**`deepLinks`** is the list of routes saved for this app. It is `null` until that save finishes.
-
-**`devIndicator`** is `"enabled"`, `"disabled"`, or `null` if the person has not chosen yet. It remembers whether the development mark is shown.
-
-**`diagnostics`** is `"enabled"`, `"disabled"`, or `null`. It remembers whether development failures are shared. A missing choice means sharing is on.
-
-**`error`** is the last `NotifiableError`, or `null`. Read `error.code` and `error.message`.
-
-**`config`** is the public key, push port, and other options this client was created with.
-
-### `start()`
-
-Connects, or does nothing when the app is already connected. The provider calls this on mount, so most screens never call it. Call it yourself when you built the client with `createNotifiable` and are not using the provider's automatic start, or when you want to retry after `error` is set.
+**`identify(input)`** — Attach a signed-in user. Pass at least `email` or `externalId`.
 
 ```tsx
-await notifiable.start();
-```
-
-### `requestPermission()`
-
-Shows the system permission prompt through your `push` port, then saves the result. Use it from a button. The returned value is the new permission.
-
-```tsx
-const permission = await notifiable.requestPermission();
-```
-
-The same prompt also opens on connect when the dashboard has asked for it. You do not call this function for that case.
-
-### `identify(input)`
-
-Attaches a real person to this device. Call it after your app knows who signed in.
-
-```tsx
-const subscriber = await notifiable.identify({
+await notifiable.identify({
   email: "ada@example.com",
   externalId: "user_123",
   firstName: "Ada",
@@ -205,95 +124,95 @@ const subscriber = await notifiable.identify({
 });
 ```
 
-`email`, `externalId`, `firstName`, and `lastName` are all optional, and at least an email or an external id should be set. A blank email or a blank external id is rejected. After an email or an external id is saved, the subscriber is no longer anonymous.
-
-### `inbox(query?)`
-
-Returns one page of this subscriber's notifications. Each page has 20 items. Use it for an inbox screen.
+**`inbox(query?)`** — One page of notifications (20 per page).
 
 ```tsx
 const page = await notifiable.inbox();
 const unread = await notifiable.inbox({ page: 1, opened: false });
+// { notifications, page, perPage, total }
 ```
 
-`page` chooses the page number. `opened` keeps only opened or only unopened notifications. Leave a field out to skip that filter.
+**`notification(id)`** — Load one notification by id.
 
-The result is `{ notifications, page, perPage, total }`. Each notification has `id`, `title`, `body`, `url`, `imageUrl`, `opened`, `openedAt`, `createdAt`, and `deliveryId`.
+**`openNotification(id)`** — Record that the subscriber opened it (e.g. inbox mark-as-read).
 
-### `notification(id)`
+**`clickDelivery(deliveryId)`** — Record a tap. Use `notification.deliveryId` when navigating from your own inbox.
 
-Loads one notification by id. Use it when a screen opens from a known notification id.
+**`track(name, properties?)`** — Record an event for the connected subscriber (up to 20 keys; string / number / boolean / `null`).
 
 ```tsx
-const item = await notifiable.notification(id);
+await notifiable.track("order.shipped", { order: "1001", express: true });
 ```
 
-### `openNotification(id)`
+**`setDevIndicator(enabled)`** / **`setDiagnostics(enabled)`** — Control the development mark and crash sharing. No-ops for a production key.
 
-Tells Notifiable this subscriber opened that notification. Call it when your inbox marks an item as read.
+### createNotifiable
 
-```tsx
-await notifiable.openNotification(id);
-```
-
-### `clickDelivery(deliveryId)`
-
-Tells Notifiable the person tapped that delivery. `deliveryId` is `notification.deliveryId`. Call it when they follow the notification, in addition to navigating.
+Build a client when the provider should not create one, then pass it as `client`.
 
 ```tsx
-if (item.deliveryId) {
-  await notifiable.clickDelivery(item.deliveryId);
-}
-```
+import { createNotifiable, NotifiableProvider } from "@notifiable/react-native";
 
-A development toast already does this when the preview is tapped.
-
-### `track(name, properties?)`
-
-Records an event for the connected subscriber. You do not pass the subscriber id. Use it for something that happened in the app, such as a completed order.
-
-```tsx
-const event = await notifiable.track("order.shipped", {
-  order: "1001",
-  express: true,
+const client = createNotifiable({
+  publicKey: "ntf_pub_...",
+  push: { provider: "fcm", requestPermission, getToken },
 });
 ```
 
-`name` is required. `properties` is optional: up to 20 keys, and each value is a string, a number, a boolean, or `null`. The result is `{ id, name, subscriberId }`.
+## Development vs production
 
-### `setDevIndicator(enabled)`
+| | Development key | Production key |
+| --- | --- | --- |
+| First launch | Sheet to show/hide the Notifiable mark | No sheet |
+| On screen | Draggable mark (bundle id / package check) | Nothing overlaid |
+| Notifications | Dashboard sends appear as top toasts while foreground + granted | Your push provider displays them |
+| Diagnostics | Failed SDK calls can be shared | Nothing sent |
 
-Shows or hides the development mark and remembers the choice on this device. The first-launch sheet calls this for you. Call it when your own settings screen should control the mark.
-
-```tsx
-await notifiable.setDevIndicator(true);
-```
-
-A production key does not draw the mark.
-
-### `setDiagnostics(enabled)`
-
-Turns sharing of development failures on or off and remembers the choice. The switch on the development sheet calls this for you.
-
-```tsx
-await notifiable.setDiagnostics(false);
-```
-
-A production key does not send these reports.
+Simulator tip: with a development key, send a notification from the dashboard to preview title, tap, and deep link without a physical device. On iOS simulator, **⌘N** shows the mark again.
 
 ## Errors
 
-Failed calls throw `NotifiableError`. `error.code` on the hook is the same code as the last failure.
+Failed calls throw `NotifiableError`. `error.code` on the hook matches the last failure.
 
-| Code | What happened |
+| Code | Meaning |
 | --- | --- |
-| `invalid_config` | The public key is blank, or permission was requested without `push`. |
-| `missing_provider` | `useNotifiable()` is outside `NotifiableProvider`. |
-| `invalid_public_key` | Notifiable rejected the key. |
-| `network` | The request did not succeed. |
-| `validation_failed` | A value was rejected, such as a blank email. |
-| `subscriber_not_found` | Connect has not finished, or the subscriber no longer exists. |
-| `subscriber_limit` | The project cannot add another subscriber. |
-| `rate_limited` | Too many requests. Wait and try again. |
-| `missing_token` | Permission is granted and `getToken()` returned nothing. |
-| `missing_storage` | AsyncStorage is not installed and `storage` was not passed. |
+| `invalid_config` | Blank public key, or permission without `push`. |
+| `missing_provider` | `useNotifiable()` outside the provider. |
+| `invalid_public_key` | Key rejected. |
+| `network` | Request failed. |
+| `validation_failed` | Rejected value (e.g. blank email). |
+| `subscriber_not_found` | Connect not finished, or subscriber gone. |
+| `subscriber_limit` | Project cannot add another subscriber. |
+| `rate_limited` | Too many requests. |
+| `missing_token` | Granted permission but empty token. |
+| `missing_storage` | No AsyncStorage and no `storage` prop. |
+
+## For AI agents
+
+### Rules
+
+1. Import only from `@notifiable/react-native`. Do not deep-import package internals.
+2. Mount one `NotifiableProvider` around the navigator. Always pass `publicKey` and a real `push` port from the app’s existing push setup (FCM / APNs / etc.).
+3. Call `useNotifiable()` only under that provider. Wait for `ready` before `identify`, `inbox`, `notification`, `openNotification`, `clickDelivery`, or `track`.
+4. Call `requestPermission()` from a user action (button), not on every mount.
+5. After sign-in, call `identify` with `email` and/or `externalId`.
+6. Wire `onDeepLink` to the app’s navigator. Record `clickDelivery` yourself when handling taps from a custom inbox.
+7. Use the development public key in debug builds and the production key in release builds. Do not invent hosts, env names, or CORS settings — the SDK talks to Notifiable for you.
+
+### Integration prompt
+
+Copy this into a coding agent when wiring the SDK into an existing React Native app:
+
+```text
+Integrate @notifiable/react-native into this React Native project.
+
+1. Install @notifiable/react-native and @react-native-async-storage/async-storage if missing.
+2. Find the app root / navigation root. Wrap it in NotifiableProvider from @notifiable/react-native.
+3. Pass publicKey from the project’s env (development key for debug, production key for release).
+4. Implement a push port from this app’s existing notification stack (provider: apns | fcm | expo | web_push) with requestPermission and getToken. Pass it as the push prop. Do not add Firebase/APNs/Expo libraries from the SDK — use what the app already has, or ask before adding new native deps.
+5. Pass deepLinks for the main screens Notifiable should be able to open, and onDeepLink that navigates with this app’s router.
+6. After the user signs in, call identify({ email, externalId }) once ready is true.
+7. Add a clear “Enable notifications” button that calls requestPermission().
+8. If the app has an inbox screen, use inbox(), openNotification(id), and clickDelivery(deliveryId) where appropriate.
+9. Do not explain or configure CORS, API hosts, or environments — only the public key and push port. Keep changes minimal and match existing project patterns.
+```
